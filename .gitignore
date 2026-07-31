@@ -1,6 +1,7 @@
 # --- Roblox place files ---
 # .rbxl 은 바이너리라 diff 가 불가능하고 저장할 때마다 통째로 변경됨.
-# 맵은 빌더 스크립트로 생성하므로 플레이스 파일은 언제든 재생성 가능 → 추적하지 않음.
+# ⚠ 맵 골격은 MapBuilder 로 재생성 가능하지만, 손으로 얹은 '장식'은 place 에만 존재한다.
+#    장식이 쌓이면 place 백업이나 Map.rbxmx export 를 둘 것 (docs/map-builder.md §10).
 *.rbxl
 *.rbxlx
 *.rbxl.lock

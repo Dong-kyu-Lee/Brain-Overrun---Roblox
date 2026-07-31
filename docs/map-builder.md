@@ -1,30 +1,41 @@
-# 맵 빌더 시스템 (Phase 1)
+# 맵 시스템 (Phase 1 · 정적 배치로 개정)
 
 > 이 문서는 **코드를 읽기 전에 읽는 문서**다.
-> `MapBuilder.luau` / `MapLayout.luau` 를 수정하거나, Phase 2 이후 맵 오브젝트를
+> `MapBuilder.luau` / `MapService.luau` / `MapLayout.luau` 를 수정하거나, 맵 오브젝트를
 > 참조하는 로직을 짤 때 필요한 배경·규약·함정을 담았다.
 
 ---
 
 ## 1. 세 줄 요약
 
-1. 맵은 `.rbxl` 에 저장하지 않는다. 서버 부팅 때 **코드로 매번 생성**한다.
+1. 맵은 **place(씬)에 미리 배치돼 있다.** 런타임은 만들지 않고 `MapService` 로 **찾아서 검증**만 한다.
 2. **숫자는 `Config.Map` 에만**, **좌표 계산은 `MapLayout` 에만**, **인스턴스 생성은 `MapBuilder` 에만** 있다.
-3. 만들어진 오브젝트는 **이름이 아니라 `Tags.luau` 의 태그로 찾는다.**
+   `MapBuilder` 는 **에디터 전용 도구**이며 런타임에서 호출하면 에러가 난다.
+3. 맵 오브젝트는 **이름이 아니라 `Tags.luau` 의 태그로 찾는다.**
 
 ---
 
-## 2. 왜 코드로 맵을 만드는가
+## 2. 왜 씬에 미리 배치하는가
 
-README 규약 4번의 이유를 풀어 쓰면:
+원래는 부팅 때마다 코드로 맵을 만들었다. 그 방식은 **맵을 손으로 꾸밀 수 없다** —
+Studio 에서 얹은 장식이 다음 실행 때 통째로 사라지기 때문이다. 맵 외형이 게임의
+첫인상을 좌우하는 이상, 눈으로 보면서 꾸미는 편익이 재생성의 편익보다 크다고 판단했다.
 
-- **밸런싱 반복이 빠르다.** 레인을 220 → 300 studs 로 늘리려면 `Config.Map.LaneLength` 한 줄만 고치면
-  바닥·벽 출발점·측면 벽·관전장·킬플레인이 전부 따라 움직인다. Studio 에서 파트를 끌었다면 7군데를 고쳐야 한다.
-- **`.rbxl` 을 git 에 넣지 않아도 된다.** 바이너리 place 파일은 diff·머지가 불가능하다.
-- **맵이 언제나 재현 가능하다.** Studio 에서 실수로 파트를 지워도 다음 실행 때 원상복구된다.
+**얻은 것**
 
-대가: Studio 뷰포트에서 **Edit 모드에는 맵이 보이지 않는다.** 플레이를 눌러야 나타난다.
-(Edit 모드에서 눈으로 보고 싶을 때는 §8 의 절차를 따를 것 — 그냥 `build()` 를 부르면 안 된다.)
+- Edit 모드에서 맵이 그냥 보인다. 파트를 끌고, 재질을 바꾸고, 소품을 얹으면 그대로 남는다.
+- 부팅이 하는 일이 줄었다.
+
+**잃은 것과 그 대책**
+
+| 잃은 것 | 대책 |
+|---|---|
+| `Config.Map` 을 고쳐도 씬의 파트가 따라오지 않는다 | `MapBuilder.align()` — 장식은 두고 골격만 재정렬 (§8) |
+| 손으로 꾸미다 태그를 지우거나 바닥을 옮겨도 조용히 깨진다 | `MapService.ensureReady()` 가 부팅 때 전수 점검, 치명이면 서버를 세운다 (§9) |
+| place 가 바이너리라 맵 변경이 git diff 에 안 남는다 | 골격은 `MapBuilder.build()` 로 언제든 재생성 가능. 장식은 place 에만 존재한다 (§10) |
+
+> ### ⚠ 맵을 고쳤으면 Ctrl+S
+> Studio 편집은 저장해야 남는다. `build()` / `align()` 실행 후에도 마찬가지다.
 
 ---
 
@@ -104,11 +115,21 @@ Config.luau          "숫자는 몇인가"      LaneLength = 220, WallHeight = 4
 MapLayout.luau       "어디에 얼마만큼"    floorCFrame("A") → CFrame(-20, -1, 0)
       │  (조회)                          WallTravelDistance → 228
       ▼
-MapBuilder.luau      "실제로 만든다"      Instance.new("Part") + 태그 부착
+MapBuilder.luau      "골격을 만든다"      ★ 에디터 전용 ★ specs() / build() / align()
+      │                                  런타임에서 부르면 assertEditMode 가 막는다
+      ├──────────────► Workspace.Map      ← 여기서 손으로 꾸민다. place 에 저장된다.
+      │                     │
+      │  (specs 를 빌려)     │ (찾는다)
+      ▼                     ▼
+MapService.luau      "쓸 수 있는 맵인가"  ensureReady() → 태그·기하 전수 점검
       │
       ▼
-Bootstrap.server     부팅 시 build() 1회 호출
+Bootstrap.server     부팅 시 ensureReady() 1회 호출 (생성하지 않는다)
 ```
+
+`MapService` 가 `MapBuilder` 를 `require` 하는 건 **`specs()` 하나 때문**이다. 검증에 쓸
+"원래 크기·위치"를 다시 적어두면 두 곳의 숫자가 어긋나는 순간 검증이 거짓말을 하게 된다.
+`require` 자체에는 부작용이 없고, `build()`/`align()` 은 에디터 가드에 막혀 런타임에서 실행되지 않는다.
 
 ### 이 분리를 지켜야 하는 이유
 
@@ -146,9 +167,10 @@ local Config = require(Shared:WaitForChild("Config"))
 
 ---
 
-## 5. 생성물 전체 목록
+## 5. 씬에 배치된 것 전체 목록
 
-`MapBuilder.build()` → `Workspace.Map` 폴더. **파트 17개 + SpawnLocation 1개.**
+`Workspace.Map` (폴더, 태그 `BO_MapRoot`). **폴더 4개 + 파트 14개 + SpawnLocation 1개.**
+실측으로 확인된 값이며, `MapService` 가 부팅 때 이 표와 같은 내용을 검증한다.
 
 | 폴더 | 파트 | 크기 (X,Y,Z) | 중심 위치 | 태그 | 충돌 |
 |---|---|---|---|---|---|
@@ -160,10 +182,23 @@ local Config = require(Shared:WaitForChild("Config"))
 | Walls | `WallB` | 40, 40, 8 | +20, 20, **+114** | `BO_WallB` | ✔ |
 | Spectator | `SpectatorFloor` | 120, 2, 260 | 0, 79, 0 | `BO_SpectatorFloor` | ✔ |
 | Spectator | `SpectatorRail1‥4` | 난간 4면 | Y 80‥92 | — | ✔ |
-| Bounds | `SideBarrier1` | 4, 40, 220 | -42, 20, 0 | — | ✔ |
-| Bounds | `SideBarrier2` | 4, 40, 220 | +42, 20, 0 | — | ✔ |
-| Bounds | `KillPlane` | 480, 2, 620 | 0, -60, 0 | `BO_KillPlane` | ✘ |
 | Spectator | `LobbySpawn` | SpawnLocation 40×1×40 | 0, 80.5, -65 | `BO_LobbySpawn` | ✘ |
+| Bounds | `SideBarrier1` | 4, 40, 220 | -42, 20, 0 | `BO_SideBarrier` | ✔ |
+| Bounds | `SideBarrier2` | 4, 40, 220 | +42, 20, 0 | `BO_SideBarrier` | ✔ |
+| Bounds | `KillPlane` | 480, 2, 620 | 0, -60, 0 | `BO_KillPlane` | ✘ |
+
+기본 템플릿의 `Baseplate` 는 **삭제했다.** Y=0 에서 우리 바닥과 겹칠 뿐 아니라,
+-Z 로 밀려난 플레이어를 받아버려 탈락 자체를 막는다. 다시 만들지 말 것.
+
+### `LayoutKey` 어트리뷰트 — 골격의 신분증
+
+골격 파트에는 전부 `LayoutKey` 문자열 어트리뷰트가 있다 (`"ZoneFloorA"`, `"WallB"`, …).
+`MapBuilder.align()` 이 이 값으로 짝을 찾고, `MapService` 가 이 값으로 기하 드리프트를 검사한다.
+
+- **꾸미려고 얹은 장식에는 `LayoutKey` 를 붙이지 마라.** 붙는 순간 정렬·검증 대상이 되어
+  `align()` 이 엉뚱한 자리로 끌고 간다.
+- **골격 파트를 복제할 때는 `LayoutKey` 와 태그를 지워라.** 안 지우면 키가 중복돼
+  `align()` 이 둘 중 하나만 맞추고, `MapService` 가 태그 개수 초과 경고를 낸다.
 
 ### `Zone` 어트리뷰트
 
@@ -181,9 +216,9 @@ end
 
 ### 태그 현황
 
-`Tags.luau` 의 10개 중 **9개가 부착돼 있다.** `BO_QuestionBoard` 만 0개인데,
+`Tags.luau` 의 12개 중 **11개가 부착돼 있다.** `BO_QuestionBoard` 만 0개인데,
 `Tags.luau` 주석에 "(선택)"으로 표시된 **Phase 3 항목**이라 의도적으로 만들지 않았다.
-태그 스캔 결과가 9/10 인 것은 정상이며 버그가 아니다.
+태그 스캔 결과가 11/12 인 것은 정상이며 버그가 아니다.
 
 ---
 
@@ -204,6 +239,8 @@ Phase 3 은 별도 파트를 만들지 말고 이 파트의 `Top` 면에 `Surfac
 결과여야 하며, 조작 미스로 옆으로 굴러떨어지는 건 플레이어가 납득하지 못하는 죽음이다.
 
 - 완전 투명(`Transparency = 1`)이라 시야를 가리지 않는다. **디버그 모드에서만 0.9 로 살짝 보인다.**
+  씬에 어떤 투명도로 저장돼 있든 `MapService` 가 부팅 때 `Config.Debug.Enabled` 기준으로 덮어쓴다
+  (`SpawnZone` 도 동일). **정적 맵이 Config 를 따라오는 몇 안 되는 지점이다.**
 - ±X 두 장뿐. **-Z 출구는 열어 둔다** (§3 경고 참조).
 
 ### 관전장 난간 (`SpectatorRail`)
@@ -240,38 +277,65 @@ README 규약 1은 "밸런싱 수치는 Config 에만"이다. 색상·재질·�
    좌표 버그의 1순위 원인. 새 계산을 넣을 때 반드시 확인하라.
 3. **벽은 바닥 끝에 밀착해 출발한다.** `WallStartZ = LaneLength/2 + WallThickness/2`.
    이 값이 커지면 벽과 바닥 사이에 틈이 생겨 +Z 로 도망칠 수 있다.
-4. **`MapBuilder.build()` 는 멱등이어야 한다.** 새 오브젝트를 추가할 때 반드시
-   `Workspace.Map` 하위에 넣어라. 밖에 두면 `clear()` 가 못 지워서 재호출 시 중복된다.
+4. **골격 파트를 지우거나 태그를 떼지 않는다.** 부팅 시 `MapService` 가 잡아내 서버를 세운다.
+   꾸미다가 실수했다면 `MapBuilder.align()` 이 아니라 태그·`LayoutKey` 를 직접 복구하라.
 5. **맵 오브젝트는 태그로만 찾는다.** `workspace.Map.Walls.WallA` 같은 경로 참조 금지.
-   폴더 구조를 바꾸는 순간 조용히 깨진다.
-6. **`Instance.new` 후 속성을 다 설정한 뒤 마지막에 `Parent` 를 지정한다.**
-   `createPart` 가 이미 그렇게 돼 있다. 순서를 바꾸면 리플리케이션 비용이 늘어난다.
+   폴더 구조를 바꾸는 순간 조용히 깨진다. **꾸미면서 폴더를 재배치해도 되는 이유가 이것이다.**
+6. **장식은 반드시 `Workspace.Map` 안에 넣는다.** 밖에 두면 `MapService` 의 점검 범위를 벗어나고,
+   `clear()` 가 못 지운다.
+7. **벽(`WallA/B`)에 붙이는 장식은 벽 파트의 자식으로 넣는다.** `WallController` 가 벽을 옮길 때
+   자식 파트를 같은 상대 위치로 함께 옮기고, 파괴될 때 함께 숨긴다. 벽 옆에 형제로 두면
+   벽만 돌진하고 장식은 제자리에 남는다.
 
 ---
 
-## 8. ⚠ Edit 모드에서 `build()` 를 직접 부르지 마라
+## 8. 맵을 꾸미는 방법
 
-`MapBuilder.build()` 는 내부에서 `removeDefaultBaseplate()` 를 호출해
-`Workspace.Baseplate` 를 **`Destroy()`** 한다. 기본 템플릿 Baseplate 가 Y=0 에서
-우리 바닥과 겹치기 때문이다.
+맵은 `Workspace.Map` 에 실물로 들어있다. **그냥 Studio 에서 편집하고 Ctrl+S 하면 된다.**
+아래 세 가지만 지키면 로직이 깨지지 않는다.
 
-- **Play 모드**에서는 안전하다. 런타임 변경은 place 파일에 저장되지 않는다.
-- **Edit 모드**에서 부르면 **저장 파일의 Baseplate 가 실제로 삭제된다.**
+1. 골격 파트의 **태그와 `LayoutKey` 를 지우지 않는다** (§5).
+2. 장식은 **`Workspace.Map` 안에** 넣는다. 벽 장식은 **벽 파트의 자식으로** (§7-7).
+3. **-Z 끝단(Z = -110)을 막지 않는다** (§3).
 
-Edit 모드에서 맵을 눈으로 봐야 한다면 Baseplate 를 잠시 피신시켰다가 되돌린다:
+### `Config.Map` 을 고친 뒤 — `align()`
+
+정적 맵의 유일한 대가는 `Config` 변경이 자동으로 따라오지 않는다는 것이다.
+`align()` 이 **장식은 그대로 두고** `LayoutKey` 가 붙은 골격만 재정렬한다.
 
 ```lua
--- 1) 세우기
-local ServerStorage = game:GetService("ServerStorage")
-local baseplate = workspace:FindFirstChild("Baseplate")
-if baseplate then baseplate.Parent = ServerStorage end
-require(game.ServerScriptService.Server.MapBuilder).build()
-
--- 2) 되돌리기
-require(game.ServerScriptService.Server.MapBuilder).clear()
-local bp = ServerStorage:FindFirstChild("Baseplate")
-if bp then bp.Parent = workspace end
+-- Studio Edit 모드 명령 바
+require(game.ServerScriptService.Server.MapBuilder).align()
+-- → [MapBuilder] 정렬 완료 | N개 이동/리사이즈, 문제 0건 — Ctrl+S 로 저장할 것
 ```
+
+⚠ 장식은 따라오지 않는다. 레인 길이를 바꿨다면 장식은 손으로 옮겨야 한다.
+
+### 처음부터 다시 만들기 — `build()`
+
+```lua
+require(game.ServerScriptService.Server.MapBuilder).build()
+```
+
+**`Workspace.Map` 을 통째로 지우고 새로 만든다. 꾸며 둔 장식도 전부 사라진다.**
+쓸 일은 두 가지뿐이다: 맵이 아예 없는 place 를 처음 세팅할 때, 또는 골격을 포기하고 리셋할 때.
+`Workspace.Baseplate` 도 함께 삭제된다(§5).
+
+> `build()` / `align()` / `clear()` 는 **Edit 모드 전용**이다. 런타임에서 부르면
+> `assertEditMode` 가 에러를 낸다 — 실수로 게임 중 맵이 리셋되는 사고를 막기 위함이다.
+
+> ### ⚠ Edit 모드에서 모듈이 옛날 코드로 실행될 때
+> Studio 의 Edit 세션은 `require` 결과를 **인스턴스 단위로 캐시**한다. Rojo 가 소스를
+> 갱신해도 이미 한 번 require 한 모듈은 옛 코드가 돈다. 사본을 만들면 새로 실행된다:
+>
+> ```lua
+> local mb = game.ServerScriptService.Server.MapBuilder:Clone()
+> mb.Parent = game:GetService("ServerStorage")
+> require(mb).align()
+> mb:Destroy()
+> ```
+>
+> 가장 확실한 방법은 place 를 닫았다 다시 여는 것이다.
 
 > 참고: `ServerStorage.__Rojo_SessionLock` 은 Rojo 가 만든 것이다. 지우지 마라.
 
@@ -281,11 +345,15 @@ if bp then bp.Parent = workspace end
 
 ### 부팅 로그
 
-Play 를 누르면 다음이 찍혀야 한다. 숫자가 다르면 `Config.Map` 이 바뀐 것이다.
+Play 를 누르면 다음이 찍혀야 한다. 숫자가 다르면 `Config.Map` 이 바뀐 것이고,
+**경고 건수가 0 이 아니면 맵이 Config 와 어긋난 것이다** — 출력창에서 어떤 파트인지 확인하라.
 
 ```
-[MapBuilder] 맵 생성 완료 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s)
+[MapService] 맵 확인 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s) | 경고 0건
 ```
+
+맵이 없거나 필수 태그가 빠졌으면 **부팅이 에러로 멈춘다.** 이건 의도된 동작이다 —
+반쯤 망가진 맵으로 게임을 돌리면 원인을 알 수 없는 판정 버그로 나타난다.
 
 ### 태그 전수 점검 (Server datamodel)
 
@@ -295,7 +363,7 @@ local Tags = require(game.ReplicatedStorage.Shared.Tags)
 for key, tag in Tags do
     print(key, tag, #CollectionService:GetTagged(tag))
 end
--- BO_QuestionBoard 만 0, 나머지 8개는 1 이상이어야 정상
+-- BO_QuestionBoard 만 0, 나머지 11개는 1 이상이어야 정상
 ```
 
 ### 기하 점검
@@ -323,7 +391,25 @@ end
 
 ---
 
-## 10. Phase 2 연동 현황 (완료)
+## 10. 맵과 버전 관리
+
+**맵이 place 로 옮겨가면서 git 이 추적하는 범위가 줄었다.** 정확히 알고 있어야 한다.
+
+| 대상 | 어디에 있나 | git 추적 |
+|---|---|---|
+| 골격의 **정의** (크기·위치·색) | `Config.Map` / `Config.Theme` / `MapLayout` / `MapBuilder.specs()` | ✔ |
+| 골격의 **실물** | place 파일 (`Workspace.Map`) | ✘ — `build()` 로 재생성 가능 |
+| **장식** | place 파일 (`Workspace.Map` 안) | ✘ — **재생성 불가. 여기서 사라지면 끝이다.** |
+
+장식이 쌓이기 시작하면 백업 수단을 하나 두는 게 좋다. 둘 중 하나면 충분하다.
+
+- **place 자체를 백업**한다 (Roblox 클라우드 저장 / 로컬 `.rbxl` 사본).
+- `Workspace.Map` 을 선택 → **File → Export Selection** → `assets/Map.rbxmx` 로 저장하고 커밋한다.
+  `.gitignore` 는 `*.rbxm` 만 무시하므로 `.rbxmx` 는 그대로 추적된다.
+
+---
+
+## 11. Phase 2 연동 현황 (완료)
 
 맵 쪽에서 해야 했던 일은 전부 끝났다. 구현 내용은 [round-loop.md](round-loop.md) 참고.
 

@@ -167,7 +167,7 @@ end
 -- 시작
 -- ─────────────────────────────────────────────
 
---- MapBuilder.build() 가 끝난 뒤에 호출해야 한다(KillPlane 태그를 찾기 때문).
+--- MapService.ensureReady() 가 끝난 뒤에 호출해야 한다(KillPlane 태그를 찾기 때문).
 function Arena.start()
 	for _, part in CollectionService:GetTagged(Tags.KillPlane) do
 		bindKillPlane(part)

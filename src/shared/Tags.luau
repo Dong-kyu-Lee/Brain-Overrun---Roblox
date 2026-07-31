@@ -7,6 +7,9 @@
 ]]
 
 local Tags = {
+	-- 루트
+	MapRoot = "BO_MapRoot", -- 씬에 미리 배치된 맵 전체를 담는 폴더
+
 	-- 존
 	ZoneA = "BO_ZoneA", -- A구역 바닥 (SurfaceGui 부착 대상)
 	ZoneB = "BO_ZoneB", -- B구역 바닥
@@ -20,6 +23,7 @@ local Tags = {
 
 	-- 판정
 	KillPlane = "BO_KillPlane", -- 맵 밖 낙하 감지면
+	SideBarrier = "BO_SideBarrier", -- 레인 좌우 추락 방지 벽 (디버그 시에만 보인다)
 
 	-- 표시
 	AnswerScreen = "BO_AnswerScreen", -- 선택지를 출력하는 바닥 SurfaceGui 호스트

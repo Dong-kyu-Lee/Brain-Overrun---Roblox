@@ -204,7 +204,7 @@ end
 ### 부팅 로그
 
 ```
-[MapBuilder] 맵 생성 완료 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s)
+[MapService] 맵 확인 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s) | 경고 0건
 [Round] Lobby | R0 | 생존 0
 [BrainOverrun] 서버 부팅 완료
 [BrainOverrun] Debug.RevealAnswer = true — 정답이 전 클라이언트에 노출됩니다. 출시 전 끌 것.

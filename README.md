@@ -49,7 +49,8 @@ src/
 │   └── MapLayout.luau  Config 파생 맵 좌표/크기 계산
 ├── server/     → ServerScriptService.Server
 │   ├── Bootstrap.server.luau  서버 진입점 (초기화 순서 주의)
-│   ├── MapBuilder.luau        맵 생성
+│   ├── MapBuilder.luau        맵 골격 생성/재정렬 ★ 에디터 전용 도구 ★
+│   ├── MapService.luau        씬에 배치된 맵 탐색·검증 (런타임)
 │   ├── SessionService.luau    한 판 동안의 플레이어 상태 (생존/관전)
 │   ├── Arena.luau             배치·텔레포트·탈락 감지
 │   ├── WallController.luau    파괴의 벽 이동/파괴
@@ -65,7 +66,7 @@ src/
 
 | 문서 | 내용 |
 |---|---|
-| [docs/map-builder.md](docs/map-builder.md) | 맵 빌더 (Phase 1) — 좌표계, 생성물 목록, 설계 근거, 불변 조건 |
+| [docs/map-builder.md](docs/map-builder.md) | 맵 시스템 (Phase 1) — 좌표계, 배치물 목록, **꾸미는 방법**, 설계 근거, 불변 조건 |
 | [docs/round-loop.md](docs/round-loop.md) | 라운드 루프 (Phase 2) — 상태머신, 생존 판정, 벽 이동 함정 |
 
 ## 맵 좌표계
@@ -79,6 +80,16 @@ src/
 * **Y축** — 높이. `Config.Map.FloorY`는 메인 바닥의 *윗면* 높이다(중심이 아님).
 
 기본 수치 기준 경기장은 80 × 220 studs, 벽 이동거리 228 studs(1라운드 약 4.15초)다.
+
+## 맵 꾸미기
+
+맵은 **씬(`Workspace.Map`)에 미리 배치돼 있다.** Studio 에서 그냥 편집하고 Ctrl+S 하면 된다.
+지켜야 할 세 가지와 `Config.Map` 변경 후 재정렬(`MapBuilder.align()`) 절차는
+[docs/map-builder.md §8](docs/map-builder.md) 참고.
+
+* 골격 파트의 **태그와 `LayoutKey` 어트리뷰트를 지우지 마라.** 부팅 시 `MapService` 가 잡아내 서버를 세운다.
+* 장식은 **`Workspace.Map` 안에** 넣어라. 벽 장식은 **벽 파트의 자식으로** 넣어야 벽과 함께 움직인다.
+* ⚠ `MapBuilder.build()` 는 **꾸며 둔 것을 전부 지우고** 골격을 새로 만든다. 리셋할 때만 쓸 것.
 
 ## 라운드 루프
 
@@ -100,14 +111,17 @@ Lobby → Countdown → WallRush → Judge → Intermission → (반복) → Gam
 1. **모든 밸런싱 수치는 `Config.luau`에만 존재한다.** 다른 파일에 하드코딩된 상수가 보이면 버그다.
 2. **서버 권위(Server Authority).** 정답 값은 클라이언트로 전송하지 않고, 쿨타임·사용 횟수·거리 판정은 전부 서버가 한다.
 3. **맵 오브젝트는 이름이 아닌 태그로 찾는다.** (`Tags.luau`)
-4. **맵은 빌더 스크립트로 생성한다.** `.rbxl`은 git에 추적하지 않으며 언제든 재생성 가능해야 한다.
+4. **맵은 씬에 미리 배치돼 있고, 런타임은 그것을 검증해서 쓴다.** 코드로 생성하지 않는다.
+   골격은 `MapBuilder`(에디터 전용)로 언제든 재생성 가능하지만, **손으로 얹은 장식은 place 에만 존재한다.**
+   `.rbxl`은 여전히 git에 추적하지 않으므로 장식이 쌓이면 백업 수단을 둘 것
+   ([docs/map-builder.md §10](docs/map-builder.md)).
 
 ## 구현 로드맵
 
 | Phase | 내용 | 상태 |
 |---|---|---|
 | 0 | 프로젝트 골격 · 규약 · Config | ✅ |
-| 1 | 맵 빌더 (레인/벽/관전장/킬플레인) | ✅ |
+| 1 | 맵 (레인/벽/관전장/킬플레인) — 씬에 정적 배치 + 부팅 검증 | ✅ |
 | 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ✅ |
 | 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ⬜ |
 | 4 | 난이도 커브 · 벽 파괴 연출 | ⬜ |
