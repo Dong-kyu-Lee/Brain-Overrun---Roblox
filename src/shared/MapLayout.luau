@@ -3,7 +3,10 @@
 	MapLayout — Config.Map 수치로부터 맵의 모든 좌표/크기를 계산한다.
 
 	★ 좌표계 규약
-	  · X축 = 레인 폭 방향. A레인이 -X, B레인이 +X.
+	  · X축 = 레인 폭 방향. A레인이 +X, B레인이 -X.
+	          ★ 기준은 좌표 부호가 아니라 '플레이어가 보는 좌우'다. 벽이 오는 +Z 를 바라보면
+	            Roblox 의 RightVector 가 -X 라서 +X 가 왼쪽에 보인다. 그래서 A가 왼쪽이다.
+	            존↔X 대응은 LeftZone 한 곳에서만 정한다(§laneCenterX / zoneAtPosition).
 	  · Z축 = 레인 길이 방향이자 벽의 진행 방향.
 	          벽은 +Z(먼 쪽) 에서 출발해 -Z(스폰 쪽) 로 돌진하며, 오답 구역 플레이어를
 	          -Z 끝단 밖으로 밀어낸다. 따라서 -Z 끝은 절대 막지 않는다.
@@ -31,10 +34,16 @@ MapLayout.MapLength = M.LaneLength
 --- 순회용 존 목록
 MapLayout.Zones = { "A", "B" } :: { Zone }
 
---- 존 중심의 X 좌표. A는 음수, B는 양수.
+--- 벽이 오는 +Z 를 바라봤을 때 '왼쪽'에 보이는 존.
+--- +Z 를 보면 RightVector 가 -X 이므로 왼쪽 = +X 다. 즉 LeftZone 이 +X 레인이다.
+--- ★ 좌우를 바꾸고 싶으면 이 한 줄만 고친다. laneCenterX 와 zoneAtPosition 이 둘 다
+---   이 값에서 파생되므로 배치와 판정이 어긋날 수 없다. (고친 뒤 MapBuilder.align() 실행)
+MapLayout.LeftZone = "A" :: Zone
+
+--- 존 중심의 X 좌표. LeftZone 이 양수(+X = 화면 왼쪽), 반대편이 음수.
 function MapLayout.laneCenterX(zone: Zone): number
 	local offset = (M.LaneWidth + M.LaneGap) / 2
-	return if zone == "A" then -offset else offset
+	return if zone == MapLayout.LeftZone then offset else -offset
 end
 
 -- ─────────────────────────────────────────────
@@ -184,7 +193,9 @@ function MapLayout.zoneAtPosition(position: Vector3): Zone?
 	if math.abs(x) < M.LaneGap / 2 then
 		return nil -- 두 레인 사이의 틈 (LaneGap = 0 이면 발생하지 않음)
 	end
-	return if x < 0 then "A" else "B"
+	-- laneCenterX 와 같은 근원(LeftZone)에서 파생시킨다.
+	-- 여기에 "A"/"B" 를 직접 적으면 배치는 바뀌었는데 판정만 옛 좌우로 남는 사고가 난다.
+	return if x > 0 then MapLayout.LeftZone else MapLayout.oppositeZone(MapLayout.LeftZone)
 end
 
 --- 정답 구역의 반대편

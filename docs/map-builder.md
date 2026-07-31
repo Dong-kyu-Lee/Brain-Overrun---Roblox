@@ -42,7 +42,7 @@ Studio 에서 얹은 장식이 다음 실행 때 통째로 사라지기 때문�
 ## 3. 좌표계 — 가장 먼저 외울 것
 
 ```
-                          +Z  (벽 출발 방향)
+                          +Z  (벽 출발 방향 — 플레이어가 바라보는 쪽)
                            ▲
          ┌─────────┬─────────┐   Z = +118   벽 뒷면
          │  WallA  │  WallB  │              각 40 × 40 × 8
@@ -51,16 +51,21 @@ Studio 에서 얹은 장식이 다음 실행 때 통째로 사라지기 때문�
          │  Zone A │  Zone B │
     ║    │  (파랑) │  (주황) │    ║          ZoneFloor 각 40 × 2 × 220
     ║    │         │         │    ║          ║ = SideBarrier (X = ±42)
--X ◄╫────┤         │         ├────╫─► +X
++X ◄╫────┤         │         ├────╫─► -X
     ║    │ ┌─────┐ │ ┌─────┐ │    ║   Z = -40
     ║    │ │Spawn│ │ │Spawn│ │    ║          스폰밴드 깊이 50
     ║    │ └─────┘ │ └─────┘ │    ║   Z = -90
     ║    │         │         │    ║
          └─────────┴─────────┘   Z = -110   바닥 -Z 끝 ★ 열려 있음 ★
-      X=-40      X=0      X=+40
+      X=+40      X=0      X=-40
                            ▼
                           -Z  (벽 도착 / 탈락자가 밀려나는 방향)
 ```
+
+> ★ **이 그림은 플레이어 시점이다** — 스폰(-Z)에 서서 벽이 오는 +Z 를 바라본 좌우.
+> 그래서 X축이 그림 왼쪽으로 증가한다. Roblox 에서 `+Z` 를 바라보면 `RightVector` 가
+> `-X` 라서 **+X 가 왼쪽에 보이기** 때문이다.
+> Studio 의 위에서 내려다보는 뷰와는 좌우가 뒤집혀 보이니 주의할 것.
 
 **단면 (Y축)**
 
@@ -83,7 +88,7 @@ Studio 에서 얹은 장식이 다음 실행 때 통째로 사라지기 때문�
 
 | 축 | 의미 | 규칙 |
 |---|---|---|
-| **X** | 레인 폭 방향 | **A레인이 -X, B레인이 +X.** `LaneGap = 0` 이라 X=0 에서 맞붙는다. |
+| **X** | 레인 폭 방향 | **A레인이 +X, B레인이 -X** = 플레이어가 벽을 바라볼 때 **A가 왼쪽, B가 오른쪽**. `LaneGap = 0` 이라 X=0 에서 맞붙는다. |
 | **Z** | 레인 길이 = **벽의 진행 방향** | 벽은 **+Z 에서 출발해 -Z 로 돌진**한다. 오답 구역 플레이어는 -Z 밖으로 밀려난다. |
 | **Y** | 높이 | `Config.Map.FloorY` 는 바닥의 **윗면**이다. 중심이 아니다. |
 
@@ -174,12 +179,12 @@ local Config = require(Shared:WaitForChild("Config"))
 
 | 폴더 | 파트 | 크기 (X,Y,Z) | 중심 위치 | 태그 | 충돌 |
 |---|---|---|---|---|---|
-| Lanes | `ZoneFloorA` | 40, 2, 220 | -20, -1, 0 | `BO_ZoneA`, `BO_AnswerScreen` | ✔ |
-| Lanes | `ZoneFloorB` | 40, 2, 220 | +20, -1, 0 | `BO_ZoneB`, `BO_AnswerScreen` | ✔ |
-| Lanes | `SpawnZoneA` | 40, 8, 50 | -20, 4, -65 | `BO_SpawnZone` | ✘ |
-| Lanes | `SpawnZoneB` | 40, 8, 50 | +20, 4, -65 | `BO_SpawnZone` | ✘ |
-| Walls | `WallA` | 40, 40, 8 | -20, 20, **+114** | `BO_WallA` | ✔ |
-| Walls | `WallB` | 40, 40, 8 | +20, 20, **+114** | `BO_WallB` | ✔ |
+| Lanes | `ZoneFloorA` | 40, 2, 220 | **+20**, -1, 0 | `BO_ZoneA`, `BO_AnswerScreen` | ✔ |
+| Lanes | `ZoneFloorB` | 40, 2, 220 | **-20**, -1, 0 | `BO_ZoneB`, `BO_AnswerScreen` | ✔ |
+| Lanes | `SpawnZoneA` | 40, 8, 50 | **+20**, 4, -65 | `BO_SpawnZone` | ✘ |
+| Lanes | `SpawnZoneB` | 40, 8, 50 | **-20**, 4, -65 | `BO_SpawnZone` | ✘ |
+| Walls | `WallA` | 40, 40, 8 | **+20**, 20, **+114** | `BO_WallA` | ✔ |
+| Walls | `WallB` | 40, 40, 8 | **-20**, 20, **+114** | `BO_WallB` | ✔ |
 | Spectator | `SpectatorFloor` | 120, 2, 260 | 0, 79, 0 | `BO_SpectatorFloor` | ✔ |
 | Spectator | `SpectatorRail1‥4` | 난간 4면 | Y 80‥92 | — | ✔ |
 | Spectator | `LobbySpawn` | SpawnLocation 40×1×40 | 0, 80.5, -65 | `BO_LobbySpawn` | ✘ |
@@ -232,6 +237,24 @@ Phase 3 은 별도 파트를 만들지 말고 이 파트의 `Top` 면에 `Surfac
 
 바닥 위에 얇은 스크린 파트를 따로 얹지 않은 이유: 파트가 겹치면 Z-fighting 이 나고,
 플레이어 충돌 판정에 미세한 턱이 생긴다.
+
+### A가 왼쪽인 이유 — 그리고 좌우를 바꾸는 방법
+
+플레이어가 벽을 바라볼 때 **A가 왼쪽, B가 오른쪽**이어야 한다. "A/B" 는 사람이 좌우로 읽는
+선택지이고, 바닥에 A·B 선택지가 그려지는 이 게임에서 왼쪽이 B면 매 라운드 인지 부하가 생긴다.
+
+좌표 부호로 외우면 반드시 틀린다. Roblox 에서 `+Z` 를 바라볼 때 `RightVector` 는 `-X` 이므로
+**왼쪽이 `+X`** 다. 그래서 A레인이 `+X` 에 있다. 이 대응은 `MapLayout.LeftZone` 한 곳에만 있다:
+
+```lua
+MapLayout.LeftZone = "A" :: Zone   -- ← 좌우를 바꾸려면 이 한 줄만
+```
+
+`laneCenterX`(배치) 와 `zoneAtPosition`(판정) 이 **둘 다 이 값에서 파생**된다.
+어느 한쪽에 `"A"`/`"B"` 를 직접 적으면, 배치는 바뀌었는데 판정만 옛 좌우로 남아
+**정답 구역에 서 있는데 탈락하는** 최악의 버그가 된다. 절대 하드코딩하지 마라.
+
+바꾼 뒤에는 씬의 파트도 옮겨야 한다 — `MapBuilder.align()` 실행 후 Ctrl+S (§8).
 
 ### 측면 벽 (`SideBarrier`) — 기획서에 없지만 넣은 것
 
