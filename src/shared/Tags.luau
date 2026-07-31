@@ -12,6 +12,7 @@ local Tags = {
 	ZoneB = "BO_ZoneB", -- B구역 바닥
 	SpectatorFloor = "BO_SpectatorFloor", -- 상공 투명 유리 관전장
 	SpawnZone = "BO_SpawnZone", -- 라운드 시작 스폰 영역
+	LobbySpawn = "BO_LobbySpawn", -- 관전장 위 로비 SpawnLocation (접속/리스폰 기본 위치)
 
 	-- 기믹
 	WallA = "BO_WallA", -- A레인 끝 파괴의 벽

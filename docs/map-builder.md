@@ -148,7 +148,7 @@ local Config = require(Shared:WaitForChild("Config"))
 
 ## 5. 생성물 전체 목록
 
-`MapBuilder.build()` → `Workspace.Map` 폴더. **파트 17개 + SpawnLocation 2개.**
+`MapBuilder.build()` → `Workspace.Map` 폴더. **파트 17개 + SpawnLocation 1개.**
 
 | 폴더 | 파트 | 크기 (X,Y,Z) | 중심 위치 | 태그 | 충돌 |
 |---|---|---|---|---|---|
@@ -163,7 +163,7 @@ local Config = require(Shared:WaitForChild("Config"))
 | Bounds | `SideBarrier1` | 4, 40, 220 | -42, 20, 0 | — | ✔ |
 | Bounds | `SideBarrier2` | 4, 40, 220 | +42, 20, 0 | — | ✔ |
 | Bounds | `KillPlane` | 480, 2, 620 | 0, -60, 0 | `BO_KillPlane` | ✘ |
-| TempSpawns | `TempSpawnA/B` | SpawnLocation | ±20, 0.5, -65 | — | ✘ |
+| Spectator | `LobbySpawn` | SpawnLocation 40×1×40 | 0, 80.5, -65 | `BO_LobbySpawn` | ✘ |
 
 ### `Zone` 어트리뷰트
 
@@ -181,9 +181,9 @@ end
 
 ### 태그 현황
 
-`Tags.luau` 의 9개 중 **8개가 부착돼 있다.** `BO_QuestionBoard` 만 0개인데,
+`Tags.luau` 의 10개 중 **9개가 부착돼 있다.** `BO_QuestionBoard` 만 0개인데,
 `Tags.luau` 주석에 "(선택)"으로 표시된 **Phase 3 항목**이라 의도적으로 만들지 않았다.
-태그 스캔 결과가 8/9 인 것은 정상이며 버그가 아니다.
+태그 스캔 결과가 9/10 인 것은 정상이며 버그가 아니다.
 
 ---
 
@@ -212,15 +212,17 @@ Phase 3 은 별도 파트를 만들지 말고 이 파트의 `Top` 면에 `Surfac
 기획 의도가 "탈락자 이탈률 방어"이므로 관전석은 안전해야 한다.
 난간 4면은 모서리에 틈이 없도록 ±X 난간이 Z 방향으로 더 길게(268) 뻗어 코너를 덮는다.
 
-### `TempSpawns` — Phase 2 에서 지울 것
+### `LobbySpawn` 이 관전장 위에 있는 이유
 
-Phase 1 을 눈으로 확인하려면 캐릭터가 맵 위에 서야 하는데, `SpawnLocation` 이 하나도 없으면
-원점에 스폰돼 레인 경계에 낀다. 그래서 각 레인 스폰밴드에 `Neutral = true` 인 `SpawnLocation`
-을 뒀다. Roblox 가 알아서 둘 중 하나를 고르므로 "A/B 무작위 스폰"도 덤으로 맞는다.
+맵 전체에서 `SpawnLocation` 은 이것 하나뿐이고, 경기장이 아니라 **관전장 유리 바닥 위**에 있다.
+(Phase 1 의 레인별 `TempSpawns` 는 Phase 2 에서 이것으로 교체됐다.)
 
-**Phase 2 가 라운드 상태머신에서 직접 텔레포트로 배치하기 시작하면
-`MapBuilder.buildTemporarySpawns` 함수와 그 호출부를 통째로 지운다.**
-`Duration = 0` 이라 포스필드는 생기지 않는다.
+접속·리스폰의 기본 위치를 관전장으로 두면 **진행 중인 라운드에 난입할 수 없다.** 중간 접속자는
+자연스럽게 구경하다가 다음 게임의 참가자 명단에 들어간다. 경기장 안에 스폰을 두면 라운드
+도중 벽 뒤에 사람이 튀어나오는 상황을 매번 걸러내야 한다.
+
+라운드 중의 실제 배치는 `SpawnLocation` 이 아니라 `RoundService` 가 텔레포트로 한다
+(`MapLayout.spawnPointCFrame`). `Duration = 0` 이라 포스필드는 생기지 않는다.
 
 ### `Config.Theme` 가 따로 있는 이유
 
@@ -316,20 +318,31 @@ end
 | 벽 이동거리 | 228 studs |
 | 1라운드 벽 소요시간 | 4.15초 (55 studs/s) |
 | 최대속도 시 소요시간 | 1.34초 (170 studs/s) |
-| 캐릭터 스폰 실측 | `(-9.5, 3.0, -60.9)` — A레인 스폰밴드 내부 |
+| 정답 벽 파괴 지점 | z = +34.2 (진행률 0.35) |
+| 로비 스폰 실측 | `(0, 80.5, -65)` — 관전장 유리 바닥 위 |
 
 ---
 
-## 10. Phase 2 로 넘어갈 때
+## 10. Phase 2 연동 현황 (완료)
 
-맵 쪽에서 해야 할 일:
+맵 쪽에서 해야 했던 일은 전부 끝났다. 구현 내용은 [round-loop.md](round-loop.md) 참고.
 
-- [ ] `buildTemporarySpawns` 및 호출부 제거 → 상태머신이 텔레포트로 배치
-- [ ] `BO_WallA/B` 를 태그로 찾아 `wallCFrameAtProgress(zone, alpha)` 로 이동
-      (소요시간 = `MapLayout.WallTravelDistance / Config.getWallSpeed(round)`)
-- [ ] 라운드 시작 시 `wallStartCFrame(zone)` 으로 원위치
-- [ ] `BO_KillPlane` 에 `Touched` 연결 → 탈락 처리
-- [ ] 탈락자를 `MapLayout.SpectatorY` 위로 텔레포트
-- [ ] 정답 구역 벽은 충돌 직전 파괴 (연출은 Phase 4)
+- [x] `buildTemporarySpawns` 제거 → `LobbySpawn` 하나로 교체, 배치는 `RoundService` 가 텔레포트로 수행
+- [x] `BO_WallA/B` 를 태그로 찾아 `wallCFrameAtProgress(zone, alpha)` 로 이동 (`WallController`)
+- [x] 라운드 시작 시 `wallStartCFrame(zone)` 으로 원위치 (`WallController.reset`)
+- [x] `BO_KillPlane` 에 `Touched` 연결 → 탈락 처리 (`Arena`, Y 폴링 백스톱 포함)
+- [x] 탈락자를 `MapLayout.SpectatorY` 위로 텔레포트 (`Arena.sendToSpectator`)
+- [x] 정답 구역 벽은 `Config.Round.CorrectWallBreakProgress` 지점에서 파괴 (연출은 Phase 4)
+
+Phase 2 가 `MapLayout` 에 추가한 함수(다음 Phase 도 이걸 쓸 것):
+
+| 함수 | 용도 |
+|---|---|
+| `spawnPointCFrame(zone, rng)` | 스폰밴드 안 무작위 배치 지점 (+Z 를 바라봄) |
+| `spectatorPointCFrame(rng)` | 관전장 무작위 배치 지점 |
+| `lobbySpawnCFrame()` / `LobbySpawnSize` | 로비 `SpawnLocation` |
+| `zoneAtPosition(position)` | 이 위치가 어느 레인인가 (경기장 밖이면 `nil`) |
+| `oppositeZone(zone)` | 오답 구역 |
+| `wallFrontZ(wallCenterZ)` | 벽 선단면 Z — 관통 판정용 |
 
 `MapLayout` 에 이미 있는 것을 다시 계산하지 말 것. §4 의 표를 먼저 확인하라.

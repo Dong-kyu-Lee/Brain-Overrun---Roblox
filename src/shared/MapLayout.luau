@@ -77,6 +77,11 @@ function MapLayout.wallCFrameAtProgress(zone: Zone, alpha: number): CFrame
 	return MapLayout.wallCFrameAtZ(zone, z)
 end
 
+--- 벽의 선단면(-Z 쪽 면) Z 좌표. 이 값보다 Z 가 큰 캐릭터는 벽 안에 끼어 있는 것이다.
+function MapLayout.wallFrontZ(wallCenterZ: number): number
+	return wallCenterZ - M.WallThickness / 2
+end
+
 -- ─────────────────────────────────────────────
 -- 스폰 영역
 -- ─────────────────────────────────────────────
@@ -91,6 +96,21 @@ function MapLayout.spawnZoneCFrame(zone: Zone): CFrame
 	)
 end
 
+--- 스폰밴드 안의 무작위 배치 지점. 캐릭터는 벽이 오는 방향(+Z)을 바라본다.
+--- 여러 명을 한 점에 텔레포트하면 서로 밀려 튕겨나가므로 반드시 흩어 놓아야 한다.
+function MapLayout.spawnPointCFrame(zone: Zone, rng: Random): CFrame
+	local half = MapLayout.SpawnZoneSize / 2
+	local margin = M.SpawnEdgeMargin
+	local center = MapLayout.spawnZoneCFrame(zone).Position
+
+	local position = Vector3.new(
+		center.X + rng:NextNumber(-1, 1) * math.max(half.X - margin, 0),
+		M.FloorY + M.CharacterSpawnHeight,
+		center.Z + rng:NextNumber(-1, 1) * math.max(half.Z - margin, 0)
+	)
+	return CFrame.lookAt(position, position + Vector3.zAxis)
+end
+
 -- ─────────────────────────────────────────────
 -- 관전장 (메인 맵 상공의 투명 유리 바닥)
 -- ─────────────────────────────────────────────
@@ -103,6 +123,28 @@ MapLayout.SpectatorFloorSize = Vector3.new(
 
 function MapLayout.spectatorFloorCFrame(): CFrame
 	return CFrame.new(0, MapLayout.SpectatorY - M.FloorThickness / 2, 0)
+end
+
+--- 관전장 유리 바닥 위의 무작위 배치 지점. 탈락자 텔레포트에 쓴다.
+function MapLayout.spectatorPointCFrame(rng: Random): CFrame
+	local half = MapLayout.SpectatorFloorSize / 2
+	local margin = M.SpectatorEdgeMargin
+
+	local position = Vector3.new(
+		rng:NextNumber(-1, 1) * math.max(half.X - margin, 0),
+		MapLayout.SpectatorY + M.CharacterSpawnHeight,
+		rng:NextNumber(-1, 1) * math.max(half.Z - margin, 0)
+	)
+	return CFrame.lookAt(position, position + Vector3.zAxis)
+end
+
+--- 로비 SpawnLocation. 접속 직후·리스폰 직후의 기본 위치를 관전장으로 두어
+--- 진행 중인 게임에 난입하지 않고 구경하다가 다음 게임에 참가하게 한다.
+MapLayout.LobbySpawnSize = Vector3.new(M.LobbySpawnSize, 1, M.LobbySpawnSize)
+
+function MapLayout.lobbySpawnCFrame(): CFrame
+	local position = Vector3.new(0, MapLayout.SpectatorY + MapLayout.LobbySpawnSize.Y / 2, MapLayout.SpawnZoneCenterZ)
+	return CFrame.lookAt(position, position + Vector3.zAxis)
 end
 
 export type BoxSpec = { size: Vector3, cframe: CFrame }
@@ -127,6 +169,28 @@ end
 -- ─────────────────────────────────────────────
 -- 경계 / 판정
 -- ─────────────────────────────────────────────
+
+--- 이 위치가 어느 레인 위인가. 경기장 밖(-Z 로 밀려났거나 낙하 중)이면 nil.
+--- Y 는 보지 않는다 — 관전장에 있는 탈락자도 X/Z 만 보면 레인 위에 있기 때문에,
+--- 호출부에서 반드시 "생존자만" 대상으로 물어야 한다.
+function MapLayout.zoneAtPosition(position: Vector3): Zone?
+	if math.abs(position.Z) > M.LaneLength / 2 then
+		return nil
+	end
+	local x = position.X
+	if math.abs(x) > MapLayout.MapWidth / 2 then
+		return nil
+	end
+	if math.abs(x) < M.LaneGap / 2 then
+		return nil -- 두 레인 사이의 틈 (LaneGap = 0 이면 발생하지 않음)
+	end
+	return if x < 0 then "A" else "B"
+end
+
+--- 정답 구역의 반대편
+function MapLayout.oppositeZone(zone: Zone): Zone
+	return if zone == "A" then "B" else "A"
+end
 
 --- 레인 좌우 바깥으로 실수로 떨어지는 것만 막는다. ±X 두 장뿐이며 -Z 출구는 열어 둔다.
 function MapLayout.sideBarriers(): { BoxSpec }

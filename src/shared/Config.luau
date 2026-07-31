@@ -28,16 +28,24 @@ Config.Map = {
 	SpawnBandDepth = 50, -- 스폰 영역의 Z 길이
 	SpawnBandInset = 20, -- 레인 -Z 끝단에서 띄우는 거리
 	SpawnBandHeight = 8, -- 스폰 판정용 볼륨 높이 (충돌 없음)
+	SpawnEdgeMargin = 4, -- 스폰 영역 가장자리에서 띄우는 여유(벽에 끼는 것 방지)
+	CharacterSpawnHeight = 5, -- 텔레포트 시 바닥 위로 띄우는 높이
 
 	-- 관전장
 	SpectatorMargin = 20, -- 메인 맵보다 사방으로 넓힐 거리
 	SpectatorRailHeight = 12, -- 관전자 추락 방지 난간 높이
+	SpectatorEdgeMargin = 10, -- 관전자 배치 시 난간에서 띄우는 여유
+	LobbySpawnSize = 40, -- 관전장 위 로비 SpawnLocation 한 변 길이
 
 	-- 레인 바깥으로 실수로 떨어지지 않게 막는 측면 벽 (±X). -Z 출구는 막지 않는다.
 	SideBarrierHeight = 40,
 	SideBarrierThickness = 4,
 
 	KillPlanePadding = 400, -- 킬플레인을 맵보다 얼마나 넓게 깔지
+	FallEliminationY = -30, -- 킬플레인 Touched 를 놓쳤을 때의 낙하 탈락 백스톱 높이
+
+	-- 벽이 캐릭터를 관통(clip)했을 때 강제로 밀어내는 여유 거리
+	WallShoveMargin = 2,
 }
 
 -- ─────────────────────────────────────────────
@@ -56,8 +64,16 @@ Config.Round = {
 	WallSpeedPerRound = 8,
 	WallSpeedMax = 170,
 
+	-- 정답 구역의 벽이 파괴되는 시점(이동 진행률 0~1).
+	-- 기획서 "충돌 직전 파괴" — 눈앞까지 오되 플레이어를 맵 밖으로 밀어낼 수는 없는 값이어야 한다.
+	CorrectWallBreakProgress = 0.35,
+
+	FallGraceTime = 1.5, -- 벽 통과 후 낙하가 끝나길 기다리는 시간
+	FallCheckInterval = 0.25, -- 낙하 탈락 백스톱 폴링 주기
+
 	IntermissionTime = 3, -- 라운드 사이 대기
 	ResultDisplayTime = 2, -- 생존/탈락 결과 노출 시간
+	GameOverTime = 5, -- 우승자 발표 후 다음 게임까지 대기
 	LobbyTime = 15, -- 게임 시작 전 로비 대기
 	MinPlayersToStart = 1, -- 개발 중에는 1, 출시 시 2로 올릴 것
 }
@@ -145,6 +161,10 @@ Config.Debug = {
 	Enabled = true, -- 출시 전 false
 	VerboseLogging = true,
 	ShowStateInConsole = true,
+
+	-- Phase 3(문제 시스템) 전까지는 정답 힌트가 없으면 루프를 테스트할 수 없다.
+	-- 정답 구역을 Notify 로 알려준다. ★ 출시 전 반드시 false ★
+	RevealAnswer = true,
 }
 
 -- ─────────────────────────────────────────────

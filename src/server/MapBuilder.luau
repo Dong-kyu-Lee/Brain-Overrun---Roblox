@@ -11,8 +11,9 @@
 	생성물 (Workspace.Map)
 	  Lanes/      ZoneFloorA·B      바닥 겸 선택지 디스플레이 (Phase 3 에서 SurfaceGui 부착)
 	              SpawnZoneA·B      라운드 시작 스폰 영역 (충돌 없는 마커 볼륨)
-	  Walls/      WallA·B           파괴의 벽. 출발 위치에 배치만 하고 이동은 Phase 2.
+	  Walls/      WallA·B           파괴의 벽. 배치만 하고 이동은 WallController(Phase 2).
 	  Spectator/  SpectatorFloor    상공 투명 유리 관전장 + 난간
+	              LobbySpawn        접속/리스폰 기본 위치 (관전장 위)
 	  Bounds/     SideBarrier       좌우 추락 방지 (-Z 출구는 열려 있음)
 	              KillPlane         낙하 탈락 판정면
 ]]
@@ -178,6 +179,20 @@ local function buildSpectator(root: Folder)
 			castShadow = false,
 		})
 	end
+
+	-- 접속·리스폰의 기본 위치를 관전장으로 둔다.
+	-- 진행 중인 라운드에 난입하지 못하고, 다음 게임 시작 때 RoundService 가 아래로 내려보낸다.
+	local lobbySpawn = Instance.new("SpawnLocation")
+	lobbySpawn.Name = "LobbySpawn"
+	lobbySpawn.Size = MapLayout.LobbySpawnSize
+	lobbySpawn.CFrame = MapLayout.lobbySpawnCFrame()
+	lobbySpawn.Anchored = true
+	lobbySpawn.CanCollide = false
+	lobbySpawn.Transparency = 1
+	lobbySpawn.Neutral = true
+	lobbySpawn.Duration = 0 -- 포스필드 없음
+	lobbySpawn.Parent = folder
+	CollectionService:AddTag(lobbySpawn, Tags.LobbySpawn)
 end
 
 local function buildBounds(root: Folder)
@@ -210,29 +225,6 @@ local function buildBounds(root: Folder)
 	})
 end
 
---- Phase 1 확인용 임시 스폰. Phase 2 의 라운드 상태머신이 직접 텔레포트로
---- 배치하기 시작하면 이 함수는 제거한다.
-local function buildTemporarySpawns(root: Folder)
-	local folder = createFolder("TempSpawns", root)
-
-	for _, zone in MapLayout.Zones do
-		local spawnLocation = Instance.new("SpawnLocation")
-		spawnLocation.Name = `TempSpawn{zone}`
-		spawnLocation.Size = Vector3.new(Config.Map.LaneWidth - 4, 1, Config.Map.SpawnBandDepth)
-		spawnLocation.CFrame = CFrame.new(
-			MapLayout.laneCenterX(zone),
-			Config.Map.FloorY + 0.5,
-			MapLayout.SpawnZoneCenterZ
-		)
-		spawnLocation.Anchored = true
-		spawnLocation.CanCollide = false
-		spawnLocation.Transparency = 1
-		spawnLocation.Neutral = true
-		spawnLocation.Duration = 0 -- 포스필드 없음
-		spawnLocation.Parent = folder
-	end
-end
-
 -- ─────────────────────────────────────────────
 -- 공개 API
 -- ─────────────────────────────────────────────
@@ -257,7 +249,6 @@ function MapBuilder.build(): Folder
 	buildWalls(root)
 	buildSpectator(root)
 	buildBounds(root)
-	buildTemporarySpawns(root)
 
 	root.Parent = Workspace
 

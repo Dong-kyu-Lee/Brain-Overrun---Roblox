@@ -48,9 +48,15 @@ src/
 │   ├── Remotes.luau    네트워크 채널 정의
 │   └── MapLayout.luau  Config 파생 맵 좌표/크기 계산
 ├── server/     → ServerScriptService.Server
-│   ├── Bootstrap.server.luau  서버 진입점
-│   └── MapBuilder.luau        맵 생성
+│   ├── Bootstrap.server.luau  서버 진입점 (초기화 순서 주의)
+│   ├── MapBuilder.luau        맵 생성
+│   ├── SessionService.luau    한 판 동안의 플레이어 상태 (생존/관전)
+│   ├── Arena.luau             배치·텔레포트·탈락 감지
+│   ├── WallController.luau    파괴의 벽 이동/파괴
+│   └── RoundService.luau      라운드 상태머신
 └── client/     → StarterPlayer.StarterPlayerScripts.Client
+    ├── Bootstrap.client.luau  클라이언트 진입점
+    └── StatusDisplay.luau     상태·타이머 임시 표시 (Phase 3에서 HUD로 교체)
 ```
 
 ## 시스템 문서
@@ -60,6 +66,7 @@ src/
 | 문서 | 내용 |
 |---|---|
 | [docs/map-builder.md](docs/map-builder.md) | 맵 빌더 (Phase 1) — 좌표계, 생성물 목록, 설계 근거, 불변 조건 |
+| [docs/round-loop.md](docs/round-loop.md) | 라운드 루프 (Phase 2) — 상태머신, 생존 판정, 벽 이동 함정 |
 
 ## 맵 좌표계
 
@@ -72,6 +79,21 @@ src/
 * **Y축** — 높이. `Config.Map.FloorY`는 메인 바닥의 *윗면* 높이다(중심이 아님).
 
 기본 수치 기준 경기장은 80 × 220 studs, 벽 이동거리 228 studs(1라운드 약 4.15초)다.
+
+## 라운드 루프
+
+`RoundService`가 게임의 시간 축을 혼자 소유한다. 자세한 내용은
+[docs/round-loop.md](docs/round-loop.md) 참고. 요약하면:
+
+```
+Lobby → Countdown → WallRush → Judge → Intermission → (반복) → GameOver → Lobby
+```
+
+* **생존 판정은 위치 스냅샷이 아니라 물리 결과다.** 오답 구역 벽에 밀려 맵 밖으로 떨어진
+  사람이 탈락자이며, 벽이 오는 동안 옆 레인으로 다이브해도 살 수 있다.
+* **정답 구역은 아직 무작위다.** Phase 3이 `RoundService.pickCorrectZone` 하나만 갈아끼운다.
+* ⚠ `Config.Debug.RevealAnswer`가 켜져 있으면 정답이 전 클라이언트에 노출된다.
+  Phase 3에서 진짜 문제가 붙는 순간 **제거**할 것.
 
 ## 코딩 규약
 
@@ -86,7 +108,7 @@ src/
 |---|---|---|
 | 0 | 프로젝트 골격 · 규약 · Config | ✅ |
 | 1 | 맵 빌더 (레인/벽/관전장/킬플레인) | ✅ |
-| 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ⬜ |
+| 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ✅ |
 | 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ⬜ |
 | 4 | 난이도 커브 · 벽 파괴 연출 | ⬜ |
 | 5 | 대시 · 밀치기 | ⬜ |
