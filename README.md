@@ -45,10 +45,33 @@ src/
 │   ├── Config.luau     밸런싱 수치 단일 소스
 │   ├── Tags.luau       CollectionService 태그 상수
 │   ├── Types.luau      공유 타입 정의
-│   └── Remotes.luau    네트워크 채널 정의
+│   ├── Remotes.luau    네트워크 채널 정의
+│   └── MapLayout.luau  Config 파생 맵 좌표/크기 계산
 ├── server/     → ServerScriptService.Server
+│   ├── Bootstrap.server.luau  서버 진입점
+│   └── MapBuilder.luau        맵 생성
 └── client/     → StarterPlayer.StarterPlayerScripts.Client
 ```
+
+## 시스템 문서
+
+코드를 수정하기 전에 해당 시스템의 문서를 먼저 읽을 것.
+
+| 문서 | 내용 |
+|---|---|
+| [docs/map-builder.md](docs/map-builder.md) | 맵 빌더 (Phase 1) — 좌표계, 생성물 목록, 설계 근거, 불변 조건 |
+
+## 맵 좌표계
+
+`MapLayout.luau`가 `Config.Map`에서 모든 좌표를 계산한다. 자세한 내용은
+[docs/map-builder.md](docs/map-builder.md) 참고. 요약하면:
+
+* **X축** — 레인 폭 방향. **A레인이 -X, B레인이 +X**이며 X=0에서 맞붙는다.
+* **Z축** — 레인 길이 방향이자 벽의 진행 방향. 벽은 **+Z에서 출발해 -Z로 돌진**하고,
+  오답 구역 플레이어를 -Z 끝단 밖으로 밀어낸다. **-Z 끝은 절대 막지 않는다.**
+* **Y축** — 높이. `Config.Map.FloorY`는 메인 바닥의 *윗면* 높이다(중심이 아님).
+
+기본 수치 기준 경기장은 80 × 220 studs, 벽 이동거리 228 studs(1라운드 약 4.15초)다.
 
 ## 코딩 규약
 
@@ -62,7 +85,7 @@ src/
 | Phase | 내용 | 상태 |
 |---|---|---|
 | 0 | 프로젝트 골격 · 규약 · Config | ✅ |
-| 1 | 맵 빌더 (레인/벽/관전장/킬플레인) | ⬜ |
+| 1 | 맵 빌더 (레인/벽/관전장/킬플레인) | ✅ |
 | 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ⬜ |
 | 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ⬜ |
 | 4 | 난이도 커브 · 벽 파괴 연출 | ⬜ |

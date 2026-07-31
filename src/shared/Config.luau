@@ -23,6 +23,21 @@ Config.Map = {
 
 	SpectatorHeight = 80, -- 메인 맵 위 관전장 높이
 	KillPlaneY = -60, -- 이 아래로 떨어지면 탈락 확정
+
+	-- 라운드 시작 스폰 영역: 벽 반대편(-Z) 끝에 두어 벽이 다가오는 걸 길게 보여준다.
+	SpawnBandDepth = 50, -- 스폰 영역의 Z 길이
+	SpawnBandInset = 20, -- 레인 -Z 끝단에서 띄우는 거리
+	SpawnBandHeight = 8, -- 스폰 판정용 볼륨 높이 (충돌 없음)
+
+	-- 관전장
+	SpectatorMargin = 20, -- 메인 맵보다 사방으로 넓힐 거리
+	SpectatorRailHeight = 12, -- 관전자 추락 방지 난간 높이
+
+	-- 레인 바깥으로 실수로 떨어지지 않게 막는 측면 벽 (±X). -Z 출구는 막지 않는다.
+	SideBarrierHeight = 40,
+	SideBarrierThickness = 4,
+
+	KillPlanePadding = 400, -- 킬플레인을 맵보다 얼마나 넓게 깔지
 }
 
 -- ─────────────────────────────────────────────
@@ -87,6 +102,33 @@ Config.Economy = {
 Config.Products = {
 	ReviveTicket = 0, -- 개발자 상품: 1회 부활권
 	PushSkillRobux = 0, -- 개발자 상품: 밀치기 스킬 즉시 해금
+}
+
+-- ─────────────────────────────────────────────
+-- 맵 외형 (밸런싱과 무관 — 리스킨은 여기만 고친다)
+-- ─────────────────────────────────────────────
+Config.Theme = {
+	ZoneAColor = Color3.fromRGB(56, 132, 222), -- A구역: 파랑
+	ZoneBColor = Color3.fromRGB(240, 148, 52), -- B구역: 주황
+	ZoneMaterial = Enum.Material.SmoothPlastic,
+
+	WallColor = Color3.fromRGB(196, 40, 28),
+	WallMaterial = Enum.Material.DiamondPlate,
+
+	SpectatorColor = Color3.fromRGB(180, 220, 255),
+	SpectatorTransparency = 0.75, -- 아래 경기장이 보여야 한다
+	SpectatorMaterial = Enum.Material.Glass,
+
+	RailColor = Color3.fromRGB(120, 160, 200),
+	RailTransparency = 0.5,
+
+	-- 측면 벽은 시야를 가리면 안 되므로 완전 투명. 디버그 시에만 살짝 보인다.
+	BarrierTransparency = 1,
+	BarrierDebugTransparency = 0.9,
+
+	-- 스폰 영역 마커는 평소 안 보이고 디버그에서만 보인다.
+	SpawnZoneDebugTransparency = 0.85,
+	SpawnZoneColor = Color3.fromRGB(255, 255, 255),
 }
 
 -- ─────────────────────────────────────────────
