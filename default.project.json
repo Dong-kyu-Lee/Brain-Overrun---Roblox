@@ -1,0 +1,40 @@
+{
+  "name": "BrainOverrun",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$ignoreUnknownInstances": true
+    },
+
+    "Lighting": {
+      "$className": "Lighting",
+      "$ignoreUnknownInstances": true
+    }
+  }
+}

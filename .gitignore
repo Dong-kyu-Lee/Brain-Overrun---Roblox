@@ -1,0 +1,19 @@
+# --- Roblox place files ---
+# .rbxl 은 바이너리라 diff 가 불가능하고 저장할 때마다 통째로 변경됨.
+# 맵은 빌더 스크립트로 생성하므로 플레이스 파일은 언제든 재생성 가능 → 추적하지 않음.
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# --- Rojo 빌드 산출물 ---
+build/
+*.rbxm
+
+# --- 툴체인 ---
+.rokit/
+
+# --- OS / 에디터 ---
+.DS_Store
+Thumbs.db
+desktop.ini
