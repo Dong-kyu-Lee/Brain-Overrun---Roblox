@@ -98,7 +98,11 @@ function MapService.inspect(root: Folder): Report
 		local part = byKey[spec.key]
 		if not part then
 			-- 태그 검사에서 이미 치명으로 잡히는 것들이 있으므로 여기서는 경고까지만.
-			table.insert(report.warnings, `골격 파트 {spec.key} 를 찾을 수 없다 (LayoutKey 어트리뷰트 확인)`)
+			table.insert(
+				report.warnings,
+				`골격 파트 {spec.key} 를 찾을 수 없다 — Edit 모드에서 MapBuilder.addMissing() 실행 `
+					.. "(LayoutKey 어트리뷰트가 지워진 것일 수도 있다)"
+			)
 			continue
 		end
 
@@ -118,6 +122,23 @@ function MapService.inspect(root: Folder): Report
 			table.insert(
 				report.warnings,
 				`{spec.key} 위치가 Config 기준과 다르다 ({part.Position} ≠ {spec.cframe.Position}) — MapBuilder.align() 으로 맞출 것`
+			)
+		end
+	end
+
+	-- 공중 보드는 '있으면 되는' 파트가 아니라 '보여야 하는' 파트다. 손으로 끌어 내려서
+	-- 벽 높이 아래로 들어가면 라운드 시작 순간 벽에 가려 이미지 문제를 아예 못 읽는다.
+	-- 태그가 아니라 실물 기하를 본다 — 태그만 맞고 위치가 틀린 경우가 실제로 자주 난다.
+	for _, instance in taggedInMap(root, Tags.QuestionBoard) do
+		if not instance:IsA("BasePart") then
+			continue
+		end
+		local bottom = instance.Position.Y - instance.Size.Y / 2
+		if bottom < MapLayout.WallTopY then
+			table.insert(
+				report.warnings,
+				`{instance.Name} 아랫변({bottom})이 벽 높이({MapLayout.WallTopY})보다 낮다 — `
+					.. "라운드 시작 때 벽에 가려 문제가 안 보인다 (Config.Map.QuestionBoardBottomY)"
 			)
 		end
 	end

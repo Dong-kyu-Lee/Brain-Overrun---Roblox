@@ -2,8 +2,7 @@
 --[[
 	Bootstrap — 클라이언트 진입점.
 
-	Phase 2: 라운드 상태·타이머를 보여주는 임시 표시(StatusDisplay).
-	Phase 3 이 StatusDisplay 를 정식 HUD 로 교체하고, Phase 5 가 DashInput/PushInput 을 붙인다.
+	Phase 3: 문제·타이머 HUD(Hud). Phase 5 가 DashInput/PushInput 을 붙인다.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,11 +11,13 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
-local StatusDisplay = require(script.Parent.StatusDisplay)
+local Hud = require(script.Parent.Hud)
+local ImagePreload = require(script.Parent.ImagePreload)
 
 local _ = Remotes
 
-StatusDisplay.start()
+Hud.start()
+ImagePreload.start() -- 비동기다. 실패해도 게임은 그대로 돌아간다.
 
 print("[BrainOverrun] 클라이언트 부팅 완료")
 

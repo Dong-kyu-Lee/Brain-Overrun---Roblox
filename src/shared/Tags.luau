@@ -27,7 +27,9 @@ local Tags = {
 
 	-- 표시
 	AnswerScreen = "BO_AnswerScreen", -- 선택지를 출력하는 바닥 SurfaceGui 호스트
-	QuestionBoard = "BO_QuestionBoard", -- 문제 텍스트를 띄우는 공중 보드(선택)
+	-- 문제 본문과 '본문 사진'을 띄우는 공중 보드. 없어도 서버는 뜨지만 이미지 본문 문제가
+	-- 통째로 출제되지 않는다(QuestionService.poolFor). docs/question-system.md §6.
+	QuestionBoard = "BO_QuestionBoard",
 }
 
 return Tags

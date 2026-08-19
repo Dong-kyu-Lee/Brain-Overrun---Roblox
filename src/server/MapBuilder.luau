@@ -13,15 +13,17 @@
 
 	★ 사용법 (Studio 명령 바, Edit 모드)
 	  local MapBuilder = require(game.ServerScriptService.Server.MapBuilder)
-	  MapBuilder.build()   -- 최초 1회. 기존 Map 폴더와 Baseplate 를 지우고 새로 만든다 (장식도 함께 삭제)
-	  MapBuilder.align()   -- Config.Map 을 고친 뒤. 장식을 유지한 채 골격만 재정렬
-	  MapBuilder.clear()   -- Map 폴더 통째로 제거
+	  MapBuilder.build()      -- 최초 1회. 기존 Map 폴더와 Baseplate 를 지우고 새로 만든다 (장식도 함께 삭제)
+	  MapBuilder.align()      -- Config.Map 을 고친 뒤. 장식을 유지한 채 골격만 재정렬
+	  MapBuilder.addMissing() -- 골격에 '새 파트가 추가됐을 때'. 기존 파트와 장식은 그대로 둔다
+	  MapBuilder.clear()      -- Map 폴더 통째로 제거
 	  ⚠ 실행 후 반드시 Ctrl+S 로 place 를 저장해야 결과가 남는다.
 
 	생성물 (Workspace.Map)
 	  Lanes/      ZoneFloorA·B      바닥 겸 선택지 디스플레이 (Phase 3 에서 SurfaceGui 부착)
 	              SpawnZoneA·B      라운드 시작 스폰 영역 (충돌 없는 마커 볼륨)
 	  Walls/      WallA·B           파괴의 벽. 배치만 하고 이동은 WallController.
+	  Display/    QuestionBoard     공중 문제 보드. 본문과 '본문 사진'을 띄운다 (Phase 3)
 	  Spectator/  SpectatorFloor    상공 투명 유리 관전장 + 난간
 	              LobbySpawn        접속/리스폰 기본 위치 (관전장 위)
 	  Bounds/     SideBarrier       좌우 추락 방지 (-Z 출구는 열려 있음)
@@ -132,6 +134,22 @@ function MapBuilder.specs(): { ElementSpec }
 			zone = zone,
 		})
 	end
+
+	-- 공중 문제 보드. 문제 본문과 '본문 사진'을 띄우는 유일한 장치다(docs/question-system.md §6).
+	-- 벽이 통과하는 경로 밖(+Z, 벽 높이 위)에 세우므로 CanCollide 를 꺼도 충돌 걱정이 없지만,
+	-- 플레이어가 여기까지 올 일이 없으니 물리 비용을 아예 없앤다.
+	table.insert(specs, {
+		key = "QuestionBoard",
+		name = "QuestionBoard",
+		folder = "Display",
+		size = MapLayout.QuestionBoardSize,
+		cframe = MapLayout.questionBoardCFrame(),
+		color = Theme.Board.BackgroundColor,
+		material = Theme.Board.Material,
+		canCollide = false,
+		castShadow = false,
+		tags = { Tags.QuestionBoard },
+	})
 
 	table.insert(specs, {
 		key = "SpectatorFloor",
@@ -266,6 +284,20 @@ local function removeDefaultBaseplate()
 	end
 end
 
+--- LayoutKey 어트리뷰트로 골격 파트를 색인한다. 이름·경로가 바뀌어도 짝을 찾을 수 있다.
+local function indexByLayoutKey(root: Folder): { [string]: BasePart }
+	local byKey: { [string]: BasePart } = {}
+	for _, descendant in root:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			local key = descendant:GetAttribute(LAYOUT_KEY)
+			if typeof(key) == "string" then
+				byKey[key] = descendant
+			end
+		end
+	end
+	return byKey
+end
+
 local function assertEditMode(action: string)
 	if RunService:IsRunning() then
 		error(
@@ -340,15 +372,7 @@ function MapBuilder.align(): { string }
 		error("[MapBuilder] Workspace 에 Map 이 없다. 먼저 build() 로 골격을 만들 것.", 2)
 	end
 
-	local byKey: { [string]: BasePart } = {}
-	for _, descendant in root:GetDescendants() do
-		if descendant:IsA("BasePart") then
-			local key = descendant:GetAttribute(LAYOUT_KEY)
-			if typeof(key) == "string" then
-				byKey[key] = descendant
-			end
-		end
-	end
+	local byKey = indexByLayoutKey(root)
 
 	local problems: { string } = {}
 	local aligned = 0
@@ -356,7 +380,7 @@ function MapBuilder.align(): { string }
 	for _, spec in MapBuilder.specs() do
 		local part = byKey[spec.key]
 		if not part then
-			table.insert(problems, `누락: {spec.key} — build() 로 다시 만들거나 수동으로 채울 것`)
+			table.insert(problems, `누락: {spec.key} — addMissing() 으로 채울 것`)
 			continue
 		end
 
@@ -374,6 +398,39 @@ function MapBuilder.align(): { string }
 	end
 
 	return problems
+end
+
+--- 씬에 없는 골격 파트만 새로 만든다. ★ 기존 파트와 장식은 손대지 않는다 ★
+---
+--- ★ 왜 build() 로 안 되는가
+---   build() 는 Map 폴더를 통째로 지우고 다시 만든다. 이미 꾸며 둔 맵에서는 장식이 전부
+---   날아가므로 쓸 수 없다. 그렇다고 align() 은 '이미 있는' 파트만 맞추므로 새로 추가된
+---   골격(예: Phase 3 개정의 QuestionBoard)을 만들어 주지 못한다. 그 사이를 메운다.
+function MapBuilder.addMissing(): { string }
+	assertEditMode("addMissing")
+
+	local root = MapBuilder.findRoot()
+	if not root then
+		error("[MapBuilder] Workspace 에 Map 이 없다. 먼저 build() 로 골격을 만들 것.", 2)
+	end
+
+	local byKey = indexByLayoutKey(root)
+	local added: { string } = {}
+
+	for _, spec in MapBuilder.specs() do
+		if not byKey[spec.key] then
+			createPart(spec, folderIn(root, spec.folder))
+			table.insert(added, spec.key)
+		end
+	end
+
+	if #added == 0 then
+		print("[MapBuilder] 빠진 골격 파트가 없다 — 아무것도 만들지 않았다")
+	else
+		print(`[MapBuilder] 골격 파트 {#added}개 추가: {table.concat(added, ", ")} — Ctrl+S 로 저장할 것`)
+	end
+
+	return added
 end
 
 return MapBuilder

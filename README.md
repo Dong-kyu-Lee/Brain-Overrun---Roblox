@@ -54,10 +54,15 @@ src/
 │   ├── SessionService.luau    한 판 동안의 플레이어 상태 (생존/관전)
 │   ├── Arena.luau             배치·텔레포트·탈락 감지
 │   ├── WallController.luau    파괴의 벽 이동/파괴
+│   ├── ImageAssets.luau       이미지 문제의 사진과 그 이름 ★ 대응표 = 정답표. 서버 전용 ★
+│   ├── QuestionBank.luau      문제 내용(생성기) ★ 정답이 있으므로 서버 전용 ★
+│   ├── QuestionService.luau   문제 추첨 · 정답 구역 배정 · 페이로드 생성
+│   ├── QuestionDisplay.luau   바닥 SurfaceGui · 공중 보드
 │   └── RoundService.luau      라운드 상태머신
 └── client/     → StarterPlayer.StarterPlayerScripts.Client
     ├── Bootstrap.client.luau  클라이언트 진입점
-    └── StatusDisplay.luau     상태·타이머 임시 표시 (Phase 3에서 HUD로 교체)
+    ├── Hud.luau               상태·문제 지시문·타이머·알림 (상단 밴드)
+    └── ImagePreload.luau      문제 이미지 미리 내려받기
 ```
 
 ## 시스템 문서
@@ -68,6 +73,7 @@ src/
 |---|---|
 | [docs/map-builder.md](docs/map-builder.md) | 맵 시스템 (Phase 1) — 좌표계, 배치물 목록, **꾸미는 방법**, 설계 근거, 불변 조건 |
 | [docs/round-loop.md](docs/round-loop.md) | 라운드 루프 (Phase 2) — 상태머신, 생존 판정, 벽 이동 함정 |
+| [docs/question-system.md](docs/question-system.md) | 문제 시스템 (Phase 3) — 정답 보안 경계, 문제 추가법, **바닥 스크린 캔버스 규약** |
 
 ## 맵 좌표계
 
@@ -104,9 +110,25 @@ Lobby → Countdown → WallRush → Judge → Intermission → (반복) → Gam
 
 * **생존 판정은 위치 스냅샷이 아니라 물리 결과다.** 오답 구역 벽에 밀려 맵 밖으로 떨어진
   사람이 탈락자이며, 벽이 오는 동안 옆 레인으로 다이브해도 살 수 있다.
-* **정답 구역은 아직 무작위다.** Phase 3이 `RoundService.pickCorrectZone` 하나만 갈아끼운다.
-* ⚠ `Config.Debug.RevealAnswer`가 켜져 있으면 정답이 전 클라이언트에 노출된다.
-  Phase 3에서 진짜 문제가 붙는 순간 **제거**할 것.
+* **정답 구역은 문제가 정한다.** `QuestionService.next(round).answer` 가 곧 정답 구역이다.
+
+## 문제 시스템
+
+선택지는 **A/B 구역의 바닥 자체**가, 문제 본문과 본문 사진은 **공중 보드**가 보여준다.
+HUD는 지시문과 타이머만 맡는다.
+자세한 내용은 [docs/question-system.md](docs/question-system.md) 참고. 요약하면:
+
+* **정답은 서버 밖으로 나가지 않는다.** 문제 DB(`QuestionBank`)와 이미지 대응표
+  (`ImageAssets`)가 서버 전용이고, 클라이언트가 받는 건 `QuestionService.payloadOf()`가
+  만든 페이로드뿐이다(`answer` 없음).
+* **정답 구역(A/B)은 출제 시점에 무작위로 정해진다.** DB에는 '정답 보기/오답 보기'만 있다.
+* **매체는 두 축이다.** 문제 본문(`promptKind`)과 선택지(`choiceKind`)가 각각 글자/사진이라,
+  "사진 보고 이름 고르기"와 "이름 보고 사진 고르기"를 모두 표현한다.
+* ⚠ **바닥 SurfaceGui의 캔버스 축은 직관과 다르다.** 가로가 레인 '길이' 방향이라 라벨을
+  `-90°` 돌려야 바로 선다. 실측값이니 추측으로 바꾸지 말 것
+  ([docs/question-system.md §5](docs/question-system.md)).
+* ⚠ **이미지 에셋 ID↔이름 대응표는 절대 `Shared`로 옮기지 마라.** 바닥 사진을 이름으로
+  역변환해 문제를 읽지 않고 정답을 찾을 수 있다. 클라이언트에는 이름표 없는 ID 배열만 나간다.
 
 ## 코딩 규약
 
@@ -125,7 +147,7 @@ Lobby → Countdown → WallRush → Judge → Intermission → (반복) → Gam
 | 0 | 프로젝트 골격 · 규약 · Config | ✅ |
 | 1 | 맵 (레인/벽/관전장/킬플레인) — 씬에 정적 배치 + 부팅 검증 | ✅ |
 | 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ✅ |
-| 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ⬜ |
+| 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ✅ |
 | 4 | 난이도 커브 · 벽 파괴 연출 | ⬜ |
 | 5 | 대시 · 밀치기 | ⬜ |
 | 6 | DataStore · 코인 경제 · 상점 | ⬜ |

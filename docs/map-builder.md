@@ -174,7 +174,7 @@ local Config = require(Shared:WaitForChild("Config"))
 
 ## 5. 씬에 배치된 것 전체 목록
 
-`Workspace.Map` (폴더, 태그 `BO_MapRoot`). **폴더 4개 + 파트 14개 + SpawnLocation 1개.**
+`Workspace.Map` (폴더, 태그 `BO_MapRoot`). **폴더 5개 + 파트 15개 + SpawnLocation 1개.**
 실측으로 확인된 값이며, `MapService` 가 부팅 때 이 표와 같은 내용을 검증한다.
 
 | 폴더 | 파트 | 크기 (X,Y,Z) | 중심 위치 | 태그 | 충돌 |
@@ -185,6 +185,7 @@ local Config = require(Shared:WaitForChild("Config"))
 | Lanes | `SpawnZoneB` | 40, 8, 50 | **-20**, 4, -65 | `BO_SpawnZone` | ✘ |
 | Walls | `WallA` | 40, 40, 8 | **+20**, 20, **+114** | `BO_WallA` | ✔ |
 | Walls | `WallB` | 40, 40, 8 | **-20**, 20, **+114** | `BO_WallB` | ✔ |
+| Display | `QuestionBoard` | 80, 32, 2 | 0, **60**, **+127** | `BO_QuestionBoard` | ✘ |
 | Spectator | `SpectatorFloor` | 120, 2, 260 | 0, 79, 0 | `BO_SpectatorFloor` | ✔ |
 | Spectator | `SpectatorRail1‥4` | 난간 4면 | Y 80‥92 | — | ✔ |
 | Spectator | `LobbySpawn` | SpawnLocation 40×1×40 | 0, 80.5, -65 | `BO_LobbySpawn` | ✘ |
@@ -221,9 +222,21 @@ end
 
 ### 태그 현황
 
-`Tags.luau` 의 12개 중 **11개가 부착돼 있다.** `BO_QuestionBoard` 만 0개인데,
-`Tags.luau` 주석에 "(선택)"으로 표시된 **Phase 3 항목**이라 의도적으로 만들지 않았다.
-태그 스캔 결과가 11/12 인 것은 정상이며 버그가 아니다.
+`Tags.luau` 의 12개가 **전부 부착돼 있다.**
+
+`BO_QuestionBoard` 는 원래 "선택" 항목이었으나 **Phase 3 개정에서 골격으로 승격했다.**
+문제 본문의 사진을 띄울 곳이 여기뿐이기 때문이다 — 보드가 없으면 `QuestionService` 가
+사진 문제를 후보에서 통째로 뺀다(question-system.md §6). 없어도 서버는 뜨지만
+`QuestionDisplay` 가 경고를 남기고 사진 문제가 나오지 않는다.
+
+> ### ⚠ 이 문서보다 오래된 place 를 쓰고 있다면
+> `QuestionBoard` 는 나중에 추가된 골격 파트라, 그 전에 저장한 place 에는 없다.
+> `build()` 는 장식을 전부 지우므로 쓰면 안 된다. **`addMissing()`** 이 빠진 골격만
+> 새로 만든다 (§8).
+
+어느 면에 그릴지는 파트의 `Face` 어트리뷰트(`"Front"`, `"Back"`, …)로 정하며,
+없으면 `Front` 를 쓴다. 기본 배치(Z = +127)에서는 `Front` 의 법선이 -Z, 즉 스폰 쪽을
+향하므로 어트리뷰트를 붙일 필요가 없다.
 
 ---
 
@@ -233,10 +246,13 @@ end
 
 기획서 3장: "A구역과 B구역의 **바닥 자체**가 거대한 디스플레이가 되어 선택지를 출력".
 그래서 `ZoneFloorA/B` 에 `BO_ZoneA/B` 와 `BO_AnswerScreen` **두 개를 같이 붙였다.**
-Phase 3 은 별도 파트를 만들지 말고 이 파트의 `Top` 면에 `SurfaceGui` 를 붙이면 된다.
+Phase 3 의 `QuestionDisplay` 가 이 파트의 `Top` 면에 `SurfaceGui` 를 붙인다(별도 파트 없음).
 
 바닥 위에 얇은 스크린 파트를 따로 얹지 않은 이유: 파트가 겹치면 Z-fighting 이 나고,
 플레이어 충돌 판정에 미세한 턱이 생긴다.
+
+> ⚠ `Top` 면 SurfaceGui 의 캔버스 축은 **직관과 다르다** — 가로가 레인 '길이' 방향이다.
+> 바닥에 무언가를 그릴 일이 생기면 반드시 question-system.md §5 를 먼저 읽을 것.
 
 ### A가 왼쪽인 이유 — 그리고 좌우를 바꾸는 방법
 
@@ -309,6 +325,12 @@ README 규약 1은 "밸런싱 수치는 Config 에만"이다. 색상·재질·�
 7. **벽(`WallA/B`)에 붙이는 장식은 벽 파트의 자식으로 넣는다.** `WallController` 가 벽을 옮길 때
    자식 파트를 같은 상대 위치로 함께 옮기고, 파괴될 때 함께 숨긴다. 벽 옆에 형제로 두면
    벽만 돌진하고 장식은 제자리에 남는다.
+8. **공중 보드(`QuestionBoard`)는 `40 < 아랫변`, `윗변 < 78` 안에 둔다.**
+   - 아랫변이 벽 높이(40) 아래로 내려가면 **라운드 시작 순간 벽에 가려** 문제가 안 보인다.
+     두 레인의 벽을 합치면 맵 폭 전체(X = -40 ~ +40)를 덮으므로 "벽 사이로 보이겠지"는 틀렸다.
+   - 윗변이 관전장 높이(80) 위로 올라가면 유리 바닥을 뚫는다.
+   - 기본값은 아랫변 44 / 윗변 76 이며, 조정은 `Config.Map.QuestionBoardBottomY`·`Height` 로 한다.
+     손으로 끌어 옮겨 이 범위를 벗어나면 `MapService` 가 부팅 때 경고를 낸다.
 
 ---
 
@@ -334,6 +356,20 @@ require(game.ServerScriptService.Server.MapBuilder).align()
 
 ⚠ 장식은 따라오지 않는다. 레인 길이를 바꿨다면 장식은 손으로 옮겨야 한다.
 
+### 골격에 파트가 추가됐을 때 — `addMissing()`
+
+`align()` 은 **이미 있는** 파트만 맞춘다. 골격 목록에 새 파트가 생기면(예: Phase 3 개정의
+`QuestionBoard`) 만들어 주지 못하고 `누락:` 경고만 낸다. 그렇다고 `build()` 를 쓰면
+꾸며 둔 장식이 전부 날아간다. 그 사이를 메우는 것이 `addMissing()` 이다.
+
+```lua
+require(game.ServerScriptService.Server.MapBuilder).addMissing()
+-- → [MapBuilder] 골격 파트 1개 추가: QuestionBoard — Ctrl+S 로 저장할 것
+```
+
+**빠진 것만 새로 만들고, 기존 파트와 장식은 건드리지 않는다.** 이미 다 있으면
+"빠진 골격 파트가 없다" 를 찍고 아무것도 하지 않으므로 여러 번 실행해도 안전하다.
+
 ### 처음부터 다시 만들기 — `build()`
 
 ```lua
@@ -344,8 +380,8 @@ require(game.ServerScriptService.Server.MapBuilder).build()
 쓸 일은 두 가지뿐이다: 맵이 아예 없는 place 를 처음 세팅할 때, 또는 골격을 포기하고 리셋할 때.
 `Workspace.Baseplate` 도 함께 삭제된다(§5).
 
-> `build()` / `align()` / `clear()` 는 **Edit 모드 전용**이다. 런타임에서 부르면
-> `assertEditMode` 가 에러를 낸다 — 실수로 게임 중 맵이 리셋되는 사고를 막기 위함이다.
+> `build()` / `align()` / `addMissing()` / `clear()` 는 **Edit 모드 전용**이다. 런타임에서
+> 부르면 `assertEditMode` 가 에러를 낸다 — 실수로 게임 중 맵이 리셋되는 사고를 막기 위함이다.
 
 > ### ⚠ Edit 모드에서 모듈이 옛날 코드로 실행될 때
 > Studio 의 Edit 세션은 `require` 결과를 **인스턴스 단위로 캐시**한다. Rojo 가 소스를

@@ -91,6 +91,34 @@ function MapLayout.wallFrontZ(wallCenterZ: number): number
 	return wallCenterZ - M.WallThickness / 2
 end
 
+--- 벽의 윗면 높이. 공중 보드가 이 위로 올라와야 벽에 가리지 않는다.
+--- ★ 두 레인의 벽을 합치면 맵 폭 전체(X = -40 ~ +40)를 덮는다. 즉 X=0 에 세운 보드는
+---   '두 벽 사이로 비켜갈' 수 없다 — 반드시 높이로 피해야 한다.
+MapLayout.WallTopY = M.FloorY + M.WallHeight
+
+-- ─────────────────────────────────────────────
+-- 공중 문제 보드 (Phase 3 — BO_QuestionBoard)
+--
+-- 두 레인 중앙(X=0) 상공, 벽 출발선 바깥(+Z)에 세운다. 이미지 본문 문제의 주 표시 장치다.
+--
+-- ★ 왜 레인 안이 아니라 '벽 뒤'인가
+--   스폰(Z≈-65)에서 보드까지 거리가 멀수록 올려다보는 각이 작아진다. 보드는 벽 높이(40)를
+--   넘겨야 하는데, 레인 한가운데(Z=0)에 두면 올려다보는 각이 약 40° 라 바닥 선택지를
+--   보는 시선과 정면으로 충돌한다. 벽 뒤(Z≈127)로 밀면 약 16° 가 되어 두 시선이 겹친다.
+--   경기장 끝의 대형 스코어보드와 같은 배치다.
+-- ─────────────────────────────────────────────
+MapLayout.QuestionBoardSize = Vector3.new(MapLayout.MapWidth, M.QuestionBoardHeight, M.QuestionBoardThickness)
+MapLayout.QuestionBoardCenterY = M.QuestionBoardBottomY + M.QuestionBoardHeight / 2
+MapLayout.QuestionBoardCenterZ = MapLayout.WallStartZ
+	+ M.WallThickness / 2
+	+ M.QuestionBoardGap
+	+ M.QuestionBoardThickness / 2
+
+--- 보드는 회전하지 않는다. Roblox 의 Front 면 법선이 -Z 라서, 그대로 두면 스폰(-Z)을 향한다.
+function MapLayout.questionBoardCFrame(): CFrame
+	return CFrame.new(0, MapLayout.QuestionBoardCenterY, MapLayout.QuestionBoardCenterZ)
+end
+
 -- ─────────────────────────────────────────────
 -- 스폰 영역
 -- ─────────────────────────────────────────────
@@ -121,6 +149,56 @@ function MapLayout.spawnPointCFrame(zone: Zone, rng: Random): CFrame
 end
 
 -- ─────────────────────────────────────────────
+-- 바닥 스크린 캔버스 (Phase 3)
+--
+-- ★ 아래는 Studio 에서 실측한 규약이다. 추측하지 말 것 — 직관과 다르다.
+--
+--   바닥 파트(40 × 220) Top 면 SurfaceGui 의 캔버스는 1760 × 320 px 다. 즉
+--     캔버스 가로(X) = 레인 '길이' 방향(월드 Z)   ← 긴 쪽
+--     캔버스 세로(Y) = 레인 '폭' 방향(월드 X)
+--     캔버스 x = 0 이 +Z 끝(벽 쪽), x = 1 이 -Z 끝(스폰 쪽)
+--
+--   그래서 글자를 그대로 놓으면 레인을 따라 옆으로 눕는다. 플레이어가 +Z 를 보며 읽으려면
+--   라벨을 -90° 돌려야 한다 (Config.Theme.Screen.LabelRotation — 이 값도 실측했다).
+--
+--   돌린 라벨은 가로·세로가 맞바뀐다. 그래서 아래 함수들은 '회전 전' 크기를 돌려주되,
+--   회전 후에  가로 = 레인 폭 전체,  세로 = 원하는 레인 방향 깊이  가 되도록 미리 뒤집어 뒀다.
+--
+-- 호출부에서 Z↔캔버스 산술을 하지 말 것 — 규약이 바뀌면 여기만 고치면 되도록 모아 뒀다.
+-- ─────────────────────────────────────────────
+
+--- 회전된 라벨 하나의 배치. width/height 는 '회전 전' 스케일이다.
+export type ScreenBand = {
+	centerX: number, -- 캔버스 가로 중심(0~1). AnchorPoint (0.5, 0.5) 로 여기에 놓는다.
+	width: number, -- 회전 전 Size.X.Scale → 회전 후 레인 폭을 덮는다
+	height: number, -- 회전 전 Size.Y.Scale → 회전 후 레인 방향 깊이가 된다
+}
+
+--- 레인 Z 좌표 → 캔버스 가로 스케일 (0 = +Z 끝, 1 = -Z 끝)
+function MapLayout.floorCanvasX(z: number): number
+	return (M.LaneLength / 2 - z) / M.LaneLength
+end
+
+--- 레인 위 Z 지점을 중심으로, 깊이 depth 만큼을 쓰는 라벨의 배치
+local function screenBand(centerZ: number, depth: number): ScreenBand
+	return {
+		centerX = MapLayout.floorCanvasX(centerZ),
+		width = M.LaneWidth / M.LaneLength, -- 회전 후 레인 폭(40 studs)을 꽉 채운다
+		height = depth / M.LaneWidth, -- 회전 후 레인 방향 깊이(studs)가 된다. 1 을 넘어도 정상.
+	}
+end
+
+--- 선택지(텍스트 또는 이미지) 배치
+function MapLayout.answerBand(): ScreenBand
+	return screenBand(M.AnswerBandCenterZ, M.AnswerBandDepth)
+end
+
+--- 존 이름(A/B) 표기 배치. 스폰 지점 발밑이다.
+function MapLayout.zoneLabelBand(): ScreenBand
+	return screenBand(MapLayout.SpawnZoneCenterZ, M.ZoneLabelDepth)
+end
+
+-- ─────────────────────────────────────────────
 -- 관전장 (메인 맵 상공의 투명 유리 바닥)
 -- ─────────────────────────────────────────────
 MapLayout.SpectatorY = M.FloorY + M.SpectatorHeight
@@ -133,6 +211,16 @@ MapLayout.SpectatorFloorSize = Vector3.new(
 function MapLayout.spectatorFloorCFrame(): CFrame
 	return CFrame.new(0, MapLayout.SpectatorY - M.FloorThickness / 2, 0)
 end
+
+--- 바닥 스크린이 보여야 하는 최대 거리 (SurfaceGui.MaxDistance).
+--- 최악의 시야는 관전장 한쪽 구석에서 반대편 레인 끝을 내려다보는 경우다. 카메라는 캐릭터보다
+--- 뒤에 있으므로 그 대각선에 Theme.Screen.ViewDistanceSlack 배의 여유를 둔다.
+--- ★ 기본값(1000)에 맡기지 않는 이유: 맵이 커지면 조용히 스크린이 사라진다.
+MapLayout.ScreenViewDistance = Vector3.new(
+	MapLayout.SpectatorFloorSize.X,
+	M.SpectatorHeight,
+	MapLayout.SpectatorFloorSize.Z
+).Magnitude * Config.Theme.Screen.ViewDistanceSlack
 
 --- 관전장 유리 바닥 위의 무작위 배치 지점. 탈락자 텔레포트에 쓴다.
 function MapLayout.spectatorPointCFrame(rng: Random): CFrame

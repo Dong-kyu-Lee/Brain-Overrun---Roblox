@@ -12,7 +12,8 @@
 
 1. **시간 축을 소유한 건 `RoundService` 하나다.** 상태를 바꾸는 코드는 그 파일의 `setState` 뿐이다.
 2. **생존 판정은 위치 스냅샷이 아니라 물리 결과다.** 벽에 밀려 맵 밖으로 떨어진 사람이 탈락자다.
-3. **정답 구역은 아직 무작위다.** Phase 3 이 `RoundService.pickCorrectZone` 만 갈아끼운다.
+3. **정답 구역은 문제가 정한다.** `QuestionService.next(round).answer` 가 곧 정답 구역이다
+   (Phase 3 — [question-system.md](question-system.md)).
 
 ---
 
@@ -167,35 +168,27 @@ return participantCount >= 2 and aliveCount <= 1
 
 ---
 
-## 7. Phase 3 이 갈아끼울 곳
+## 7. Phase 3 연동 현황 (완료)
 
-라운드 흐름은 건드릴 필요가 없다. **딱 두 군데다.**
+라운드 흐름 자체는 바뀌지 않았다. 상태·시간 축은 그대로이고, 아래 네 가지만 붙었다.
+자세한 내용은 [question-system.md](question-system.md) 참고.
 
-### ① 정답 구역 결정
+- [x] **정답 구역 결정** — `pickCorrectZone()`(동전 던지기) 삭제.
+      `QuestionService.next(round).answer` 가 정답 구역이 됐다.
+- [x] **문제 노출** — `runRound` ② 단계에서 `QuestionShown` 을 쏜다.
+      페이로드는 `QuestionService.payloadOf()` 가 만들며 **`answer` 가 없다**(README 규약 2).
+- [x] **바닥 스크린** — `QuestionDisplay.show()` 가 `BO_AnswerScreen` 바닥 두 장에 선택지를 그린다.
+      `Judge` 에서 `reveal(correctZone)`, 로비·게임 종료에서 `clear()`.
+- [x] **HUD** — `StatusDisplay` → `Hud` 로 교체(문제 본문·타이머·상태·알림).
+- [x] **`Config.Debug.RevealAnswer` 제거** — 정답을 전 클라이언트에 뿌리던 물건이라
+      진짜 문제가 생긴 순간 존재 이유가 사라졌다. 서버 콘솔 전용 `LogQuestions` 로 대체.
 
-```lua
--- RoundService.luau
-local function pickCorrectZone(): Zone
-    return if rng:NextInteger(0, 1) == 0 then "A" else "B"   -- ← 여기
-end
-```
+### `beginTimedState` 가 생긴 이유
 
-`QuestionService.next()` 가 문제를 뽑고 그 `answer` 를 반환하도록 바꾼다.
-`Types.Question.answer` 가 이미 `Zone` 타입이라 그대로 맞는다.
-
-### ② 문제 노출
-
-`runRound` 의 ② 단계, `timedState("Countdown", ...)` 직전에
-`Remotes.event("QuestionShown"):FireAllClients(payload)` 를 넣는다.
-**`payload` 는 `Types.QuestionPayload` 여야 한다 — `answer` 필드가 들어가면 안 된다**
-(README 규약 2). 선택지 텍스트는 `BO_AnswerScreen` 태그가 붙은 바닥 파트의
-`SurfaceGui` 로 그린다.
-
-### ③ 그리고 지울 것
-
-- `Config.Debug.RevealAnswer` — Phase 3 전까지 루프를 손으로 테스트하기 위한 정답 힌트다.
-  진짜 문제가 나오는 순간 존재 이유가 사라진다. **출시 전이 아니라 Phase 3 에서 지워라.**
-- `src/client/StatusDisplay.luau` — 상태머신 확인용 임시 UI. 정식 HUD 로 교체한다.
+`QuestionShown.deadline` 과 `RoundStateChanged.endsAt` 은 **같은 값이어야 한다.**
+각자 `now() + seconds` 를 계산하면 두 호출 사이의 시간만큼 어긋나 HUD 타이머가 튄다.
+그래서 상태를 알리고 **종료 시각을 반환하는**(대기하지 않는) 함수를 분리했다.
+`timedState` 는 이제 그 위에 `task.wait` 만 얹은 얇은 껍데기다.
 
 ---
 
@@ -205,9 +198,10 @@ end
 
 ```
 [MapService] 맵 확인 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s) | 경고 0건
+[QuestionDisplay] 바닥 스크린 2개 | 공중 보드 1개
 [Round] Lobby | R0 | 생존 0
 [BrainOverrun] 서버 부팅 완료
-[BrainOverrun] Debug.RevealAnswer = true — 정답이 전 클라이언트에 노출됩니다. 출시 전 끌 것.
+[BrainOverrun] 디버그 모드 | 1R 제한시간 5s, 1R 벽속도 55 studs/s | 문제 16종(텍스트 10, 이미지 6)
 ```
 
 ### 라운드 진행 로그
@@ -216,11 +210,15 @@ end
 라운드가 올라가는데 `생존` 수가 줄지 않으면 §4 의 탈락 감지를 의심하라.
 
 ```
+[Round] R2 출제: 14 - 6 = ? | A=9 B=8 → 정답 B (난이도 2)
 [Round] Countdown | R2 | 생존 1
 [Round] WallRush  | R2 | 생존 1
 [Arena] 탈락: <name> (fall)
 [Round] Judge     | R2 | 생존 0
 ```
+
+출제 로그는 `Config.Debug.LogQuestions` 로 켜고 끈다. **서버 콘솔에만** 찍히므로
+켜 둔 채 테스트해도 정답이 클라이언트로 새지 않는다.
 
 ### 벽 파괴 지점 확인 (Server datamodel)
 

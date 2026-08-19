@@ -18,9 +18,11 @@
 	  오답 구역 벽이 밀어내 맵 밖으로 떨어진 사람이 탈락자다(Arena 가 감지).
 	  Judge 단계의 eliminateZone 은 그걸 놓쳤을 때를 위한 안전망일 뿐이다.
 
-	★ 정답 구역은 Phase 3 이 정한다
-	  지금은 pickCorrectZone() 이 무작위로 고른다. Phase 3 에서 QuestionService 가
-	  문제를 뽑고 그 answer 를 넘겨주도록 이 함수만 갈아끼우면 된다.
+	★ 정답 구역은 문제가 정한다 (Phase 3)
+	  QuestionService.next(round) 가 문제를 뽑고, 그 answer 가 곧 정답 구역이다.
+	  RoundService 는 문제의 내용을 모른다 — 어느 존이 정답인지만 받아서 벽에 넘긴다.
+	  ★ 문제 테이블(answer 포함)을 클라이언트로 보내면 안 된다. 나가는 것은
+	    QuestionService.payloadOf() 가 만든 것뿐이다(README 규약 2).
 ]]
 
 local Players = game:GetService("Players")
@@ -33,6 +35,8 @@ local MapLayout = require(Shared:WaitForChild("MapLayout"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local Arena = require(script.Parent.Arena)
+local QuestionDisplay = require(script.Parent.QuestionDisplay)
+local QuestionService = require(script.Parent.QuestionService)
 local SessionService = require(script.Parent.SessionService)
 local WallController = require(script.Parent.WallController)
 
@@ -72,23 +76,27 @@ local function notifyAll(message: string, kind: string)
 	Remotes.event("Notify"):FireAllClients(message, kind)
 end
 
-local function timedState(state: string, round: number, seconds: number, extra: { [string]: any }?)
-	local payload: { [string]: any } = { duration = seconds, endsAt = now() + seconds }
+--- 상태를 알리고 '종료 시각'을 반환한다. 대기하지 않는다.
+--- 문제 페이로드가 상태 알림과 똑같은 종료 시각을 써야 HUD 타이머가 어긋나지 않으므로,
+--- endsAt 을 두 번 계산하지 않고 이 함수가 만든 하나를 돌려 쓴다.
+local function beginTimedState(state: string, round: number, seconds: number, extra: { [string]: any }?): number
+	local endsAt = now() + seconds
+	local payload: { [string]: any } = { duration = seconds, endsAt = endsAt }
 	for key, value in extra or {} do
 		payload[key] = value
 	end
 	setState(state, round, payload)
+	return endsAt
+end
+
+local function timedState(state: string, round: number, seconds: number, extra: { [string]: any }?)
+	beginTimedState(state, round, seconds, extra)
 	task.wait(seconds)
 end
 
 -- ─────────────────────────────────────────────
 -- 라운드 구성 요소
 -- ─────────────────────────────────────────────
-
---- Phase 3 에서 QuestionService.next().answer 로 교체된다.
-local function pickCorrectZone(): Zone
-	return if rng:NextInteger(0, 1) == 0 then "A" else "B"
-end
 
 --- 참가자 확정. 지금 접속해 있는 전원이 참가한다.
 local function buildRoster(): number
@@ -149,27 +157,37 @@ end
 
 --- 한 라운드를 끝까지 진행하고, 게임을 계속해도 되는지 반환한다.
 local function runRound(round: number): boolean
-	local correctZone = pickCorrectZone()
+	local question = QuestionService.next(round)
+	local correctZone: Zone = question.answer
 
-	-- ① 준비: 벽 원위치 + 생존자 무작위 배치
+	if Config.Debug.LogQuestions then
+		-- ★ 서버 콘솔에만 찍는다. 클라이언트로 나가면 그 순간 게임이 끝난다.
+		print(`[Round] R{round} 출제: {QuestionService.describe(question)}`)
+	end
+
+	-- ① 준비: 벽 원위치 + 바닥에 선택지 + 생존자 무작위 배치
+	--    배치보다 스크린을 먼저 켠다 — 스폰하자마자 선택지가 이미 떠 있어야 한다.
 	WallController.reset()
+	QuestionDisplay.show(question)
 	placeSurvivors()
 
-	-- ② 문제 노출 & 이동 (Phase 3 이 여기서 QuestionShown 을 함께 쏜다)
-	if Config.Debug.RevealAnswer then
-		-- Phase 3 전까지 루프를 손으로 테스트하기 위한 힌트. 출시 전 Config.Debug 에서 끈다.
-		notifyAll(`[디버그] 정답 구역: {correctZone}`, "info")
-	end
-	timedState("Countdown", round, Config.getCountdown(round))
+	-- ② 문제 노출 & 이동
+	--    상태 알림과 문제 페이로드가 같은 종료 시각을 공유해야 HUD 타이머가 어긋나지 않는다.
+	local countdown = Config.getCountdown(round)
+	local deadline = beginTimedState("Countdown", round, countdown, { questionId = question.id })
+	Remotes.event("QuestionShown"):FireAllClients(QuestionService.payloadOf(question, deadline))
+	task.wait(countdown)
 
 	-- ③ 벽 돌진. rush() 가 블로킹하므로 상태 알림은 먼저 보낸다.
-	local rushDuration = WallController.rushDuration(round)
-	setState("WallRush", round, { duration = rushDuration, endsAt = now() + rushDuration })
+	beginTimedState("WallRush", round, WallController.rushDuration(round))
 	WallController.rush(correctZone, round)
 
 	-- ④ 낙하가 끝나길 기다린 뒤 판정
 	task.wait(Config.Round.FallGraceTime)
 	Arena.eliminateZone(MapLayout.oppositeZone(correctZone)) -- 안전망
+
+	-- 판정이 끝난 뒤에야 정답을 월드에 드러낸다. 이 줄을 위로 올리면 정답이 새어나간다.
+	QuestionDisplay.reveal(correctZone)
 
 	local survivors = SessionService.alivePlayers()
 	Remotes.event("RoundResult"):FireAllClients(correctZone, userIdsOf(survivors))
@@ -226,6 +244,7 @@ local function runGame()
 		Arena.sendToSpectator(player)
 	end
 	WallController.reset()
+	QuestionDisplay.clear()
 
 	task.wait(Config.Round.GameOverTime)
 end
@@ -235,6 +254,7 @@ end
 -- ─────────────────────────────────────────────
 
 local function waitForPlayers()
+	QuestionDisplay.clear()
 	setState("Lobby", 0)
 
 	while #Players:GetPlayers() < Config.Round.MinPlayersToStart do
@@ -243,7 +263,7 @@ local function waitForPlayers()
 
 	-- 로비 카운트다운. 도중에 인원이 빠지면 처음부터 다시 기다린다.
 	local remaining = Config.Round.LobbyTime
-	setState("Lobby", 0, { duration = remaining, endsAt = now() + remaining })
+	beginTimedState("Lobby", 0, remaining)
 
 	while remaining > 0 do
 		task.wait(1)

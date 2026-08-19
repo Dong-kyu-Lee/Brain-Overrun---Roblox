@@ -34,6 +34,12 @@ local FUNCTION_NAMES = {
 	"GetPlayerData", -- () -> PlayerData
 	"GetSessionState", -- () -> SessionState
 	"PurchaseItem", -- (itemId: string) -> (ok: boolean, message: string)
+
+	-- () -> { string }  프리로드용 이미지 에셋 ID 목록.
+	-- ★ '이름표 없는' 평탄한 ID 배열만 나간다 ★ 어느 ID 가 어떤 동물인지는 서버만 안다.
+	--   ID↔이름 대응표(ImageAssets)가 클라이언트로 새면 바닥 사진을 이름으로 역변환해
+	--   문제를 읽지 않고 정답을 찾을 수 있다 — QuestionBank 를 서버에 둔 것과 같은 이유다.
+	"GetImageAssets",
 }
 
 local Remotes = {}
