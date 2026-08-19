@@ -162,16 +162,13 @@ README 규약 1은 **밸런싱 수치**를 `Config` 에 모으라는 것이다.
 |---|---|---|---|
 | 1 | `animal` | 이 동물은? | 고양이 · 강아지 · 오리 |
 | 1 | `fruit` | 이 과일은? | 사과 · 바나나 |
-| 2 | `object` | 이 국가는? | 브라질 · 인도 |
+| 2 | `flag` | 이 국가는? | 브라질 · 인도 |
 
-> ⚠ **`Config.Question.ImageChance` 가 현재 `1.0` 이다.** 해당 난이도에 이미지 문제가
-> 하나라도 있으면 **텍스트 문제는 나오지 않는다**(`QuestionService.poolFor`). 이미지 출제를
-> 집중 확인하기 위한 값이며, 두 종류를 섞으려면 `0.3` 정도로 내린다.
->
-> ⚠ `object` 세트는 id 와 내용(국가)이 어긋나 있다. 국기 세트를 더 넣을 때
-> `flag` 로 개명할 것 — Source id 접두어라 바꾸면 중복 회피 히스토리만 한 번 초기화된다.
->
-> ⚠ `fruit` · `object` 는 항목이 2개뿐이라 매번 같은 쌍이 나온다. 세트당 3~4개가 목표다.
+> ⚠ `fruit` · `flag` 는 항목이 2개뿐이라 매번 같은 쌍이 나온다. 세트당 3~4개가 목표다.
+
+`Config.Question.ImageChance`(0.3)는 **문제 하나가 아니라 '풀'을 고르는 확률**이다
+(`QuestionService.poolFor`). `1.0` 으로 두면 해당 난이도에 이미지 문제가 하나라도 있는 한
+텍스트 문제가 아예 나오지 않으므로, 이미지만 집중 확인할 때 외에는 올리지 말 것.
 
 ---
 
@@ -402,7 +399,7 @@ end),
 
 | 무엇이 | 어디서 |
 |---|---|
-| 이미지 문제를 섞어 뽑기 | `QuestionService.poolFor()` — `Config.Question.ImageChance`(1.0) |
+| 이미지 문제를 섞어 뽑기 | `QuestionService.poolFor()` — `Config.Question.ImageChance`(0.3) |
 | 바닥에 사진 그리기 | `QuestionDisplay` — `ImageLabel`, `ScaleType = Fit` |
 | 보드에 본문 사진 그리기 | `QuestionDisplay.layoutBoard()` |
 | 접속 시 미리 내려받기 | `ImagePreload` — 서버의 `GetImageAssets` |

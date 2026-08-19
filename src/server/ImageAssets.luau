@@ -67,7 +67,7 @@ local SETS: { Set } = {
 		{ name = "사과", asset = "rbxassetid://86552897359496" },
 		{ name = "바나나", asset = "rbxassetid://115072734905974" },
 	} },
-	{ id = "object", prompt = "이 국가는?", difficulty = 2, entries = {
+	{ id = "flag", prompt = "이 국가는?", difficulty = 2, entries = {
 		{ name = "브라질", asset = "rbxassetid://115449110017529" },
 		{ name = "인도", asset = "rbxassetid://74453415702613" },
 	} },
