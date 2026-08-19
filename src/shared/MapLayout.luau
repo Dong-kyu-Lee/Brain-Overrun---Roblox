@@ -149,6 +149,48 @@ function MapLayout.spawnPointCFrame(zone: Zone, rng: Random): CFrame
 end
 
 -- ─────────────────────────────────────────────
+-- 난이도 커브가 쓰는 거리 (Phase 4)
+--
+-- 커브의 진짜 지표는 제한시간이 아니라 "문제를 읽고 판단할 시간"이다. 그걸 계산하려면
+-- 벽과 스폰밴드의 거리가 필요하다. 시간 계산은 CurveAudit 이 하고, 여기는 거리만 파생시킨다.
+-- ★ 스폰 영역 정의보다 뒤에 있어야 한다 — SpawnZoneCenterZ 를 쓴다.
+-- ─────────────────────────────────────────────
+
+--- 벽 선단면이 스폰밴드의 +Z 끝(= 가장 앞에 선 플레이어)에 닿기까지의 거리.
+--- ★ 제한시간이 끝나도 벽이 도착할 때까지는 계속 건너갈 수 있다(round-loop.md §3).
+---   그래서 플레이어에게 실제로 주어진 시간은 '제한시간 + 이 거리 ÷ 벽 속도' 다.
+MapLayout.WallReachDistance = (MapLayout.WallStartZ - M.WallThickness / 2)
+	- (MapLayout.SpawnZoneCenterZ + MapLayout.SpawnZoneSize.Z / 2)
+
+--- 반대편 레인으로 건너가는 데 걸어야 하는 최악의 거리.
+--- 스폰 가능한 가장 바깥 지점에서 출발해 반대 레인 안쪽으로 같은 여유만큼 들어가는 거리인데,
+--- 양쪽의 SpawnEdgeMargin 이 정확히 상쇄돼 결국 '레인 폭 + 레인 간격'이 된다.
+MapLayout.LaneCrossDistance = M.LaneWidth + M.LaneGap
+
+-- ─────────────────────────────────────────────
+-- 정답 벽 파괴 지점 (Phase 4 개정)
+--
+-- ★ 진행률을 손으로 적지 않는다 ★
+--   "충돌 직전 파괴"(기획서 2장)는 진행률이 아니라 '스폰 지점과의 거리'로 정의되는 사건이다.
+--   진행률로 박아 두면 맵 길이를 바꾸는 순간 파괴가 레인 한복판에서 일어나고, 벽이 아직
+--   멀리 있는데 정답 쪽이 먼저 사라져 문제를 읽지 않고도 이길 수 있게 된다.
+-- ─────────────────────────────────────────────
+
+--- 정답 벽이 멈추는 선단면 Z. 스폰밴드 앞 CorrectWallBreakMargin studs 지점이다.
+MapLayout.CorrectWallBreakFrontZ = MapLayout.SpawnZoneCenterZ
+	+ MapLayout.SpawnZoneSize.Z / 2
+	+ Config.Round.CorrectWallBreakMargin
+
+--- 그 지점에 해당하는 이동 진행률(0~1). WallController 가 이 값으로 파괴 시점을 잡는다.
+--- ★ clamp 는 벽이 출발선 뒤나 레인 밖에서 부서지는 것만 막는다. 값이 이상하다는 사실
+---   자체는 CurveAudit 이 부팅 때 경고한다 — 조용히 정상인 척하지 않게 하려는 것이다.
+MapLayout.CorrectWallBreakProgress = math.clamp(
+	(MapLayout.WallReachDistance - Config.Round.CorrectWallBreakMargin) / MapLayout.WallTravelDistance,
+	0,
+	1
+)
+
+-- ─────────────────────────────────────────────
 -- 바닥 스크린 캔버스 (Phase 3)
 --
 -- ★ 아래는 Studio 에서 실측한 규약이다. 추측하지 말 것 — 직관과 다르다.

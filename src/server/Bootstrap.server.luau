@@ -15,6 +15,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
+local CurveAudit = require(script.Parent.CurveAudit)
 local MapService = require(script.Parent.MapService)
 local SessionService = require(script.Parent.SessionService)
 local Arena = require(script.Parent.Arena)
@@ -36,6 +37,10 @@ end
 -- 맵은 씬(place)에 미리 배치돼 있다(README 규약 4). 여기서는 만들지 않고 검증만 한다.
 -- 맵이 없거나 필수 태그가 빠졌으면 여기서 서버를 세운다 — 반쯤 망가진 맵으로 돌리지 않는다.
 MapService.ensureReady()
+
+-- 난이도 커브 검산(Phase 4). 맵 치수에서 파생되는 지표가 있으므로 ensureReady() 다음이다.
+-- 여기서 경고가 뜨면 게임은 돌아가지만 특정 라운드가 사람이 못 푸는 상태라는 뜻이다.
+CurveAudit.report()
 
 SessionService.start()
 Arena.start() -- KillPlane 태그를 찾으므로 ensureReady() 이후여야 한다

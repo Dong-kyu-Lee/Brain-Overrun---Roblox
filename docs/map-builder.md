@@ -342,6 +342,39 @@ README 규약 1은 "밸런싱 수치는 Config 에만"이다. 색상·재질·�
 1. 골격 파트의 **태그와 `LayoutKey` 를 지우지 않는다** (§5).
 2. 장식은 **`Workspace.Map` 안에** 넣는다. 벽 장식은 **벽 파트의 자식으로** (§7-7).
 3. **-Z 끝단(Z = -110)을 막지 않는다** (§3).
+4. **레인 바닥 재질은 조용한 것으로** — 아래 「바닥 재질」 참고.
+
+### 외형은 씬이 단일 소스다
+
+**재질·색을 손으로 바꾸면 런타임에 그대로 유지된다.** 코드를 고칠 필요가 없다.
+런타임이 파트 외형을 만지는 곳은 두 군데뿐이고 **둘 다 투명도만** 건드린다.
+
+| 어디 | 무엇을 |
+|---|---|
+| `MapService.applyDebugVisibility` | `SpawnZone`·`SideBarrier` 투명도 (`Config.Debug` 기준, 매 부팅) |
+| `WallController.setBroken` | 벽 파괴 시 투명도·충돌 — 단 **씬의 값을 스냅샷해 뒀다가 되돌린다**(`rememberLook`) |
+
+즉 벽 투명도를 0.2 로 칠해 두면 파괴 후 복구도 0.2 로 돌아온다. 재질·색은 아무도 안 만진다.
+판정 강조도 파트 색이 아니라 SurfaceGui 의 Tint 로 한다 — 손으로 꾸민 외형을 라운드마다
+덮어쓰지 않으려고 그렇게 설계했다(question-system.md §5).
+
+> `Config.Theme` 은 **`build()`/`addMissing()` 이 파트를 새로 만들 때의 기본값**이다.
+> 이미 씬에 있는 파트에는 아무 영향이 없다 — `align()` 도 크기·위치만 맞추고 외형은 안 건드린다.
+> 손으로 확정한 외형을 새 place 에서도 재현하고 싶으면, 그때 `Config.Theme` 을 같은 값으로
+> 맞춰 두면 된다.
+
+### 바닥 재질 — 여기만 제약이 있다
+
+`ZoneFloorA/B` 의 `Top` 면이 곧 선택지 스크린이고, 선택지 라벨은 배경이 투명이라
+**바닥 표면이 글자 뒤로 그대로 비친다.** 바닥 글자는 이미 시선각 약 8° 로 눕혀 보이므로
+(question-system.md §5) 표면이 시끄러우면 2~5초 안에 못 읽는다.
+
+- ✅ `Plastic`(클래식 로블록스 플라스틱) · `SmoothPlastic` · `Neon` — 조용한 표면
+- ❌ `Concrete` · `Pebble` · `Slate` · `Grass` — 노이즈가 글자를 갉아먹는다
+- ❌ **`TopSurface = Studs`(레고 돌기)** — 같은 이유. 돌기 격자가 선택지 뒤에 깔린다
+
+레고 돌기를 원하면 **글자가 올라가지 않는 파트**에 주면 된다 — 벽(`WallA/B`), 관전장 난간,
+측면 장식. 벽은 제약이 없으니 마음껏 바꿔도 된다.
 
 ### `Config.Map` 을 고친 뒤 — `align()`
 
@@ -444,8 +477,8 @@ end
 | 경기장 | 80 × 220 studs |
 | 벽 이동거리 | 228 studs |
 | 1라운드 벽 소요시간 | 4.15초 (55 studs/s) |
-| 최대속도 시 소요시간 | 1.34초 (170 studs/s) |
-| 정답 벽 파괴 지점 | z = +34.2 (진행률 0.35) |
+| 최대속도 시 소요시간 | 1.11초 (205 studs/s) |
+| 정답 벽 파괴 지점 | z = -34.0 (진행률 0.649 — 스폰밴드 앞 2 studs) |
 | 로비 스폰 실측 | `(0, 80.5, -65)` — 관전장 유리 바닥 위 |
 
 ---
@@ -477,7 +510,8 @@ end
 - [x] 라운드 시작 시 `wallStartCFrame(zone)` 으로 원위치 (`WallController.reset`)
 - [x] `BO_KillPlane` 에 `Touched` 연결 → 탈락 처리 (`Arena`, Y 폴링 백스톱 포함)
 - [x] 탈락자를 `MapLayout.SpectatorY` 위로 텔레포트 (`Arena.sendToSpectator`)
-- [x] 정답 구역 벽은 `Config.Round.CorrectWallBreakProgress` 지점에서 파괴 (연출은 Phase 4)
+- [x] 정답 구역 벽은 스폰밴드 코앞(`MapLayout.CorrectWallBreakProgress`)에서 파괴
+      (폭발 연출은 [round-loop.md §5-1](round-loop.md) — 벽 파트 자체는 건드리지 않는다)
 
 Phase 2 가 `MapLayout` 에 추가한 함수(다음 Phase 도 이걸 쓸 것):
 

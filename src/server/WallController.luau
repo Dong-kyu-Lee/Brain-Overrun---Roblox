@@ -15,7 +15,13 @@
 	★ "파괴"는 Destroy 가 아니다
 	  맵은 씬에 미리 배치된 실물이다(MapService). 벽을 실제로 지우면 다음 라운드에
 	  되살릴 수 없고, 손으로 꾸며 둔 벽 장식까지 함께 날아간다. 그래서 안 보이고
-	  안 부딪히는 상태로 껐다 켠다. Phase 4 가 여기에 파편 연출을 얹는다.
+	  안 부딪히는 상태로 껐다 켠다.
+
+	★ 폭발 연출은 여기서 '알리기만' 한다 (Phase 4)
+	  setBroken(zone, wall, true) 이 WallBroken 을 쏘고, 실제 폭발은 각 클라이언트가
+	  로컬로 만든다(src/client/WallEffects.luau). 서버가 폭발 인스턴스를 만들면 그 힘이
+	  캐릭터를 밀고, 정답 구역에 서 있던 사람이 -Z 밖으로 떨어지면 오답도 아닌데 탈락한다.
+	  ★ 연출을 이유로 벽의 위치·충돌을 건드리지 말 것. 여기 있는 상태 변화가 곧 판정이다.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -25,6 +31,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local MapLayout = require(Shared:WaitForChild("MapLayout"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 local Tags = require(Shared:WaitForChild("Tags"))
 
 local Arena = require(script.Parent.Arena)
@@ -104,8 +111,13 @@ local function setWallCFrame(wall: BasePart, cframe: CFrame)
 	wall.CFrame = cframe
 end
 
-local function setBroken(wall: BasePart, broken: boolean)
+--- 벽을 파괴 상태로 껐다 켠다. 파괴로 '바뀌는' 순간에만 폭발 연출을 알린다.
+--- ★ 알림은 상태를 다 바꾼 뒤에 보낸다. 사실이 된 뒤에 알리는 순서를 지켜야
+---   연출과 판정이 어긋나지 않는다.
+local function setBroken(zone: Zone, wall: BasePart, broken: boolean)
 	local wallLook = rememberLook(wall)
+	local wasBroken = wall.Transparency >= 1 and not wall.CanCollide
+
 	wall.CanCollide = if broken then false else wallLook.canCollide
 	wall.CanTouch = not broken
 	wall.Transparency = if broken then 1 else wallLook.transparency
@@ -115,6 +127,11 @@ local function setBroken(wall: BasePart, broken: boolean)
 		part.CanCollide = if broken then false else look.canCollide
 		part.CanTouch = not broken
 		part.Transparency = if broken then 1 else look.transparency
+	end
+
+	if broken and not wasBroken then
+		-- 폭발은 각 클라이언트가 로컬로 만든다. 서버는 '언제, 어디서'만 알린다.
+		Remotes.event("WallBroken"):FireAllClients(zone, wall.CFrame, wall.Size)
 	end
 end
 
@@ -154,18 +171,20 @@ function WallController.reset()
 	for _, zone in MapLayout.Zones do
 		local wall = wallOf(zone)
 		if wall then
-			setBroken(wall, false)
+			setBroken(zone, wall, false)
 			setWallCFrame(wall, MapLayout.wallStartCFrame(zone))
 		end
 	end
 end
 
 --- 벽 돌진. 끝날 때까지 블로킹하므로 라운드 코루틴에서 호출한다.
---- 정답 구역 벽은 CorrectWallBreakProgress 지점에서 파괴되고 그 자리에 멈춘다.
+--- 정답 구역 벽은 스폰밴드 코앞(MapLayout.CorrectWallBreakProgress)에서 파괴되고 그 자리에 멈춘다.
 --- 오답 구역 벽은 -Z 끝까지 밀고 나가 그 구역 플레이어를 맵 밖으로 떨어뜨린다.
 function WallController.rush(correctZone: Zone, round: number)
 	local duration = WallController.rushDuration(round)
-	local breakAt = Config.Round.CorrectWallBreakProgress
+	-- ★ 파괴 시점은 맵 기하에서 나온다(MapLayout). 여기서 진행률을 다시 계산하지 말 것 —
+	--   파괴가 조금만 일러도 그게 곧 정답 공개다.
+	local breakAt = MapLayout.CorrectWallBreakProgress
 
 	local walls: { [string]: BasePart } = {}
 	for _, zone in MapLayout.Zones do
@@ -195,7 +214,7 @@ function WallController.rush(correctZone: Zone, round: number)
 				end
 				if alpha >= breakAt then
 					correctBroken = true
-					setBroken(wall, true)
+					setBroken(zone, wall, true)
 					continue
 				end
 			end

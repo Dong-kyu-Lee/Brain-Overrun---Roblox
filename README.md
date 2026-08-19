@@ -58,10 +58,12 @@ src/
 │   ├── QuestionBank.luau      문제 내용(생성기) ★ 정답이 있으므로 서버 전용 ★
 │   ├── QuestionService.luau   문제 추첨 · 정답 구역 배정 · 페이로드 생성
 │   ├── QuestionDisplay.luau   바닥 SurfaceGui · 공중 보드
-│   └── RoundService.luau      라운드 상태머신
+│   ├── RoundService.luau      라운드 상태머신
+│   └── CurveAudit.luau        난이도 커브 부팅 검산 ★ 수치는 없다. Config 를 읽을 뿐 ★
 └── client/     → StarterPlayer.StarterPlayerScripts.Client
     ├── Bootstrap.client.luau  클라이언트 진입점
     ├── Hud.luau               상태·문제 지시문·타이머·알림 (상단 밴드)
+    ├── WallEffects.luau       벽 파괴 폭발 ★ 로컬 전용. 아무것도 밀지 않는다 ★
     └── ImagePreload.luau      문제 이미지 미리 내려받기
 ```
 
@@ -74,6 +76,7 @@ src/
 | [docs/map-builder.md](docs/map-builder.md) | 맵 시스템 (Phase 1) — 좌표계, 배치물 목록, **꾸미는 방법**, 설계 근거, 불변 조건 |
 | [docs/round-loop.md](docs/round-loop.md) | 라운드 루프 (Phase 2) — 상태머신, 생존 판정, 벽 이동 함정 |
 | [docs/question-system.md](docs/question-system.md) | 문제 시스템 (Phase 3) — 정답 보안 경계, 문제 추가법, **바닥 스크린 캔버스 규약** |
+| [docs/difficulty-curve.md](docs/difficulty-curve.md) | 난이도 커브 (Phase 4) — 세 축, **여유시간**, CurveAudit 읽는 법, 수치를 바꿀 때의 경계 |
 
 ## 맵 좌표계
 
@@ -130,6 +133,32 @@ HUD는 지시문과 타이머만 맡는다.
 * ⚠ **이미지 에셋 ID↔이름 대응표는 절대 `Shared`로 옮기지 마라.** 바닥 사진을 이름으로
   역변환해 문제를 읽지 않고 정답을 찾을 수 있다. 클라이언트에는 이름표 없는 ID 배열만 나간다.
 
+## 난이도 커브
+
+라운드가 올라갈 때 조여지는 축은 셋이다 — **제한시간 · 문제 난이도 · 벽 속도.** 앞의 둘은
+R8~R9에서 바닥(2초 / 난이도 5)에 닿으므로 **후반을 만드는 축은 벽 속도 하나뿐이다.**
+자세한 내용은 [docs/difficulty-curve.md](docs/difficulty-curve.md) 참고. 요약하면:
+
+* **진짜 지표는 제한시간이 아니라 '여유시간'이다.** 제한시간이 끝나도 벽이 도착할
+  때까지는 계속 건너갈 수 있으므로, 실제로 문제를 읽고 판단할 시간은
+  `제한시간 + 벽 도달 시간 − 레인 횡단 시간` 이다. 기본 커브 기준 R1 5.9초 → R20 0.9초.
+* **`CurveAudit` 이 부팅 때 검산한다.** 여유시간이 하한 아래로 떨어지는 라운드, 커브가
+  멈춰 버린 구간, 문제가 없는 난이도, 정답 구역인데 밀려 탈락하는 조합을 경고한다.
+* ⚠ **커브 수치는 `Config` 에만 있다.** `CurveAudit` 에 숫자가 보이면 그게 버그다.
+* ⚠ **여유시간 계산에 대시(Phase 5)를 넣지 마라.** 쿨타임이 도는 라운드에서 아무도 못 건넌다.
+
+## 벽 파괴 연출
+
+정답 구역 벽이 부서지는 순간 **각 클라이언트가 로컬로** 폭발을 만든다
+(`WallEffects`). 서버는 `WallBroken` 으로 "언제, 어디서"만 알린다.
+자세한 내용은 [docs/round-loop.md §5-1](docs/round-loop.md) 참고.
+
+* ⚠ **연출은 절대 무언가를 밀면 안 된다.** 서버가 폭발·파편을 실물로 뿌리면 정답 구역에
+  서 있던 사람이 밀려 탈락한다. `Explosion` 인스턴스도 쓰지 않고, 연출 파트는
+  `CanCollide`/`CanQuery`/`CanTouch` 를 전부 끈다.
+* ⚠ **파괴 예고(직전 깜빡임)를 넣지 마라.** 파괴는 `WallRush` 도중에 일어나고 그때도
+  다이브가 가능하므로, 예고는 곧 '마지막 기회'를 통째로 앞당겨 주는 것이다.
+
 ## 코딩 규약
 
 1. **모든 밸런싱 수치는 `Config.luau`에만 존재한다.** 다른 파일에 하드코딩된 상수가 보이면 버그다.
@@ -148,7 +177,7 @@ HUD는 지시문과 타이머만 맡는다.
 | 1 | 맵 (레인/벽/관전장/킬플레인) — 씬에 정적 배치 + 부팅 검증 | ✅ |
 | 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ✅ |
 | 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ✅ |
-| 4 | 난이도 커브 · 벽 파괴 연출 | ⬜ |
+| 4 | 난이도 커브 · 벽 파괴 연출 | ✅ |
 | 5 | 대시 · 밀치기 | ⬜ |
 | 6 | DataStore · 코인 경제 · 상점 | ⬜ |
 | 7 | 부활권 (MarketplaceService) | ⬜ |

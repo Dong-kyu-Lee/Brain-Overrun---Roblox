@@ -20,6 +20,13 @@ local EVENT_NAMES = {
 	"RoundStateChanged", -- (state: RoundState, round: number, payload: table?)
 	"QuestionShown", -- (payload: QuestionPayload)
 	"RoundResult", -- (correctZone: Zone, survivors: {number})
+
+	-- (zone: Zone, cframe: CFrame, size: Vector3)  정답 구역 벽이 부서진 순간.
+	-- ★ 정답 유출이 아니다 ★ 벽이 눈앞에서 사라지는 건 이미 월드에 보이는 사실이고,
+	--   이 알림은 그 순간 '이후'에 나간다. 파괴 예정을 미리 알리는 채널은 만들지 말 것.
+	-- ★ 위치를 함께 보내는 이유: 클라이언트가 복제된 벽 파트를 읽으면 복제 지연만큼
+	--   폭발이 엉뚱한 곳에서 터진다.
+	"WallBroken",
 	"PlayerDataChanged", -- (data: PlayerData)
 	"SessionStateChanged", -- (session: SessionState)
 	"Notify", -- (message: string, kind: "info"|"warn"|"good")

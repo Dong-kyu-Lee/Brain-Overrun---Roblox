@@ -36,7 +36,7 @@
 |---|---|---|
 | `Lobby` | `LobbyTime` (15s) | 인원이 `MinPlayersToStart` 이상 모일 때까지 대기 |
 | `Countdown` | `getCountdown(round)` (5→2s) | 벽 원위치·생존자 배치 완료. 플레이어가 구역을 고른다 |
-| `WallRush` | `WallTravelDistance / getWallSpeed(round)` (4.15→1.34s) | 벽 돌진. **블로킹** |
+| `WallRush` | `WallTravelDistance / getWallSpeed(round)` (4.15→1.11s) | 벽 돌진. **블로킹** |
 | `Judge` | `ResultDisplayTime` (2s) | 낙하 정산 후 생존자 확정·보상 |
 | `Intermission` | `IntermissionTime` (3s) | 다음 라운드 준비 |
 | `GameOver` | `GameOverTime` (5s) | 우승자 발표, 전원 관전장 복귀 |
@@ -134,16 +134,78 @@ require 하고 싶어지면 설계가 틀어진 것이다** — 필요한 값을
 되살릴 수 없으므로, `setBroken()` 이 `CanCollide` / `CanTouch` / `Transparency` 만 토글한다.
 파괴된 벽은 그 자리에 멈추고, 다음 `reset()` 에서 출발 위치로 복귀한다.
 
-**Phase 4 의 파편 연출은 `setBroken` 안에 얹으면 된다.** 다른 곳을 고칠 필요가 없다.
+---
 
-### `CorrectWallBreakProgress` 를 올릴 때 주의
+## 5-1. 벽 파괴 폭발 (Phase 4)
 
-기본값 0.35 는 벽이 z=+114 → z=+34.2 까지 온 뒤 부서진다는 뜻이다.
-이 값을 크게 하면 연출은 더 아슬아슬해지지만, **정답 구역 플레이어가 -Z 밖으로
-밀려나 오답도 아닌데 탈락하는 순간** 게임이 망가진다.
+`setBroken(zone, wall, true)` 이 **파괴로 바뀌는 순간에만** `WallBroken` 을 쏘고,
+실제 폭발은 각 클라이언트가 로컬로 만든다([`src/client/WallEffects.luau`](../src/client/WallEffects.luau)).
+서버가 하는 일은 "언제, 어디서 부서졌는가"를 알리는 것뿐이다.
+
+### ⚠ 연출은 절대 무언가를 밀면 안 된다
+
+서버가 폭발이나 파편을 실물로 뿌리면 그 힘이 캐릭터를 민다. **정답 구역에 서 있던 사람이
+밀려 -Z 밖으로 떨어지면 오답도 아닌데 탈락한다** — §4의 판정이 통째로 무너진다.
+그래서 세 겹의 방어를 둔다.
+
+1. 폭발은 **클라이언트 로컬**이다. 서버로 복제되지 않으므로 판정에 닿을 수 없다.
+2. `Explosion` 인스턴스를 쓰지 않는다. `BlastPressure = 0` 으로 둘 수는 있지만, 로컬
+   캐릭터는 클라이언트가 직접 시뮬레이션하므로 언젠가 누가 압력을 되돌리는 순간
+   **내 화면에서만 밀려나는** 서버와 어긋난 위치가 생긴다. 입자·빛·화면 흔들림뿐이다.
+3. 연출용 파트는 `CanCollide` / `CanQuery` / `CanTouch` 를 전부 끈다. 하나만 빠뜨려도
+   연출용 물건이 게임에 개입하기 시작한다.
+
+`Config.Theme.WallBreak` 에도 **미는 수치가 없다.** 있으면 그게 버그다.
+
+### ⚠ 파괴 예고(직전 깜빡임)를 넣지 않는 이유
+
+하이퍼캐주얼의 정석은 "부서지기 직전 벽이 붉게 깜빡인다" 지만, 이 게임에서는 넣으면 안 된다.
+**파괴 자체가 정답 공개이기 때문이다.** 그래서 파괴 지점을 스폰 코앞까지 늦춰 뒀는데
+(아래 절), 예고를 주면 그 늦춘 만큼을 그대로 되돌려 준다 — 문제를 읽지 않고 '깜빡이지 않는
+쪽'에서 도망치면 되는 게임이 된다. 예고 시간은 곧 무료 정답 열람 시간이다.
+
+### 위치를 이벤트에 실어 보내는 이유
+
+`WallBroken` 은 `(zone, cframe, size)` 를 함께 보낸다. 클라이언트가 복제된 벽 파트를 직접
+읽으면 복제 지연만큼 폭발이 엉뚱한 곳에서 터진다. 벽은 이 게임에서 유일하게 빠르게
+움직이는 오브젝트라 그 오차가 눈에 띈다.
+
+### 연출 수명
+
+`Config.Theme.WallBreak.Lifetime`(기본 2초) 안에 전부 사라져야 한다. 파괴는 `WallRush`
+도중에 일어나므로 뒤에 남은 돌진 시간 + `FallGraceTime` + `ResultDisplayTime` +
+`IntermissionTime` 이 전부 버퍼다. 이 값을 크게 키우면 **다음 라운드가 시작된 뒤에도
+연기가 남아** 새 벽이 이미 출발선에 서 있는 화면과 겹친다.
+
+### 관전자도 본다
+
+`FireAllClients` 로 나가므로 탈락자 화면에서도 재생된다. 화면 흔들림은 폭발까지의 거리로
+감쇠하므로(`Shake.Falloff`) 상공 관전장에서는 약하게만 흔들린다. **흔들림은 짧고 약하게
+유지할 것 — 과하면 그대로 멀미가 된다.**
+
+### ⚠ 정답 벽은 '스폰 코앞'에서 부서진다 — 파괴가 곧 정답 공개이기 때문이다
+
+파괴 지점은 진행률이 아니라 **스폰밴드와의 거리**로 정한다.
+`Config.Round.CorrectWallBreakMargin`(기본 2 studs)이 유일한 손잡이이고, 실제 진행률은
+`MapLayout.CorrectWallBreakProgress` 가 맵 치수에서 파생시킨다.
+
+```
+파괴 선단면 z = 스폰밴드 +Z 끝(-40) + CorrectWallBreakMargin(2) = -38
+진행률       = (WallReachDistance 150 − 2) ÷ WallTravelDistance 228 = 0.649
+```
+
+**이 지점을 앞당기면 게임이 무너진다.** 예전 값(진행률 0.35, z=+34)은 벽이 아직 레인
+한복판에 있을 때 정답 쪽이 사라지는 장면을 보여줬다 — 문제를 읽지 않고 **부서지는 쪽으로
+달려도 여유 있게 살 수 있었다.** 지금은 두 벽이 나란히 스폰 코앞까지 온 뒤에야 한쪽이
+부서지므로, 그 장면이 보일 때는 오답 구역 사람이 이미 벽에 밀리고 있다.
+
+반대로 너무 늦추면(= `CorrectWallBreakMargin` 을 음수로) 벽이 스폰밴드 안까지 밀고 들어와
+**자기 구역에서 꼼짝도 안 한 정답 구역 플레이어를 밀기 시작한다.** 두 경계 모두
+`CurveAudit` 이 부팅 때 검사한다.
 
 경계 계산: 정답 구역에서 가장 +Z 에 붙어 있던 플레이어가 밀려나는 최대 거리는
-`WallTravelDistance × 진행률` 이다. 이 값이 `LaneLength`(220)에 근접하면 위험하다.
+`WallTravelDistance × 진행률`(= 148 studs)이다. 이 값이 `LaneLength`(220)에 근접하면
+정답 구역인데도 -Z 밖으로 밀려 탈락한다.
 
 ---
 
@@ -192,12 +254,38 @@ return participantCount >= 2 and aliveCount <= 1
 
 ---
 
+## 7-1. Phase 4 연동 현황 (완료)
+
+라운드 흐름은 여기서도 바뀌지 않았다. 상태·시간 축은 그대로다.
+
+- [x] **난이도 커브 검산** — `CurveAudit.report()` 를 부팅에 추가. 커브 수치는 `Config` 에
+      그대로 있고, 검산기는 표를 합쳐 읽기만 한다. 자세한 내용은
+      [difficulty-curve.md](difficulty-curve.md).
+- [x] **`WallSpeedMax` 170 → 205** — 후반의 유일한 축이 R16에 멈춰 R16~R20이 같은
+      라운드였다. 205는 R20에서야 걸린다.
+- [x] **커브 조회 규칙 통일** — `Config` 안의 `curveAt(list, round)` 하나로 모았다.
+      예전에는 `getCountdown` 이 `math.min`, `getMaxDifficulty` 가 `math.clamp` 을 썼다.
+- [x] **벽 파괴 폭발** — `setBroken` 이 `WallBroken` 을 쏘고 클라이언트가 로컬로 재생(§5-1).
+- [x] **파괴 지점을 스폰 코앞으로** — `Config.Round.CorrectWallBreakProgress`(0.35, 레인 한복판)를
+      `CorrectWallBreakMargin`(스폰밴드 앞 2 studs)으로 바꾸고 진행률은 `MapLayout` 이 파생시킨다.
+      **파괴가 곧 정답 공개이므로 이 지점이 이르면 문제를 안 읽어도 이긴다**(§5-1).
+- [x] **`MapLayout` 에 커브용 거리 두 개** — `WallReachDistance` / `LaneCrossDistance`.
+
+Phase 5(대시)가 들어와도 **`CurveAudit` 의 횡단 시간은 걷는 속도 그대로 둘 것**
+([difficulty-curve.md §2](difficulty-curve.md)).
+
+---
+
 ## 8. 검증 방법
 
 ### 부팅 로그
 
 ```
 [MapService] 맵 확인 | 80x220 studs | 벽 이동거리 228 studs (1R 4.15s) | 경고 0건
+[CurveAudit] 커브 20라운드 | 레인 횡단 1.82s (40 studs ÷ 22 studs/s) | 벽 도달 150 studs
+[CurveAudit]  R1  제한 5.0s | 벽속도  55 | 난이도 ≤1 | 여유 5.91s
+   ... (계단이 움직인 라운드만 — difficulty-curve.md §3)
+[CurveAudit] 정답 벽 파괴 z=-38.0 (진행률 0.65 · 스폰밴드 앞 2 studs) | 밀림 최대 148 / 레인 220 studs | 경고 0건
 [QuestionDisplay] 바닥 스크린 2개 | 공중 보드 1개
 [Round] Lobby | R0 | 생존 0
 [BrainOverrun] 서버 부팅 완료
@@ -234,14 +322,14 @@ RunService.Heartbeat:Connect(function()
         print(("WallA collide=%s @ z=%.1f"):format(tostring(prev), A.Position.Z))
     end
 end)
--- 파괴 시 z = +34.2 (기본 CorrectWallBreakProgress = 0.35) 이면 정상
+-- 파괴 시 z = -34.0 (스폰밴드 앞 2 studs · 진행률 0.649) 이면 정상
 ```
 
 ### 확인된 실측값
 
 | 항목 | 값 |
 |---|---|
-| 정답 벽 파괴 지점 | z = +34.2 |
+| 정답 벽 파괴 지점 | z = -34.0 (선단면 -38 = 스폰밴드 앞 2 studs) |
 | 오답 벽 최종 위치 | z = -114.0 (= `MapLayout.WallEndZ`) |
 | 정답 구역 생존율 | 7/7 (다이브 포함) |
 | 탈락자 관전장 Y | 85 (= `SpectatorY` + 캐릭터 높이) |

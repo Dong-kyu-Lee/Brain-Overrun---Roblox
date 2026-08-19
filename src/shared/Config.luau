@@ -88,13 +88,37 @@ Config.Round = {
 	MinCountdown = 2,
 
 	-- 파괴의 벽 이동 속도 (studs/sec). 라운드마다 가산되며 상한에서 고정.
+	--
+	-- ★ 상한은 '커브가 멈추는 지점'이다 (Phase 4)
+	--   제한시간은 R8 에 2초, 난이도는 R9 에 5 로 상한에 닿아 그 뒤로는 움직이지 않는다.
+	--   즉 후반 라운드를 서로 다르게 만드는 축은 이 속도 하나뿐이다. 170 이면 R16 에
+	--   상한에 걸려 R16~R20 이 완전히 같은 라운드가 됐다 — 5라운드가 통째로 같은 난이도다.
+	--   205 는 R20(55+19×8=207)에서야 걸리는 값이라 마지막까지 커브가 살아 있다.
+	--   ★ 올릴 때는 반드시 MinReactionMargin 을 함께 볼 것. CurveAudit 이 부팅 때 검산한다.
 	WallSpeedBase = 55,
 	WallSpeedPerRound = 8,
-	WallSpeedMax = 170,
+	WallSpeedMax = 205,
 
-	-- 정답 구역의 벽이 파괴되는 시점(이동 진행률 0~1).
-	-- 기획서 "충돌 직전 파괴" — 눈앞까지 오되 플레이어를 맵 밖으로 밀어낼 수는 없는 값이어야 한다.
-	CorrectWallBreakProgress = 0.35,
+	-- 커브 검증 하한(초). "여유시간"이 이 값 아래로 내려가면 CurveAudit 이 경고한다.
+	--   여유시간 = 제한시간 + 벽이 스폰밴드에 닿기까지의 시간 − 레인 횡단 시간
+	-- 곧 플레이어가 '문제를 읽고 판단하는 데' 실제로 쓸 수 있는 시간이다. 제한시간이 끝나도
+	-- 벽이 올 때까지는 계속 건너갈 수 있으므로(round-loop.md §3) 제한시간만 보면 실제보다
+	-- 빡빡해 보인다. 반대로 이 값이 0 에 가까워지면 정답을 알아도 못 건너는 라운드가 된다.
+	MinReactionMargin = 0.8,
+
+	-- 정답 구역의 벽이 파괴되는 지점. 벽 '선단면'이 스폰밴드 앞 이 거리(studs)에 닿는 순간이다.
+	-- 실제 진행률은 MapLayout.CorrectWallBreakProgress 가 맵 치수에서 파생시킨다.
+	--
+	-- ★ 진행률(0~1)이 아니라 거리로 적는 이유
+	--   예전에는 0.35 라는 진행률이었고, 벽이 z=+34 — 레인 한복판 — 에서 부서졌다.
+	--   그러면 벽이 아직 멀리 있을 때 '정답 쪽이 사라지는' 장면이 먼저 보여서,
+	--   문제를 안 읽고 부서지는 쪽으로 달려도 여유 있게 살 수 있었다. 파괴가 곧 정답 공개다.
+	--   ★ 파괴는 반드시 '이미 늦은 시점'에 일어나야 한다 ★ 그 시점은 진행률이 아니라
+	--   스폰 지점과의 거리로 정의되는 값이라, 맵 길이가 바뀌면 진행률은 따라 바뀌어야 한다.
+	--
+	-- ★ 0 보다 작게 두지 말 것. 벽이 스폰밴드 안까지 밀고 들어와 제자리에 서 있던
+	--   정답 구역 플레이어를 밀기 시작한다. CurveAudit 이 부팅 때 경고한다.
+	CorrectWallBreakMargin = 2,
 
 	FallGraceTime = 1.5, -- 벽 통과 후 낙하가 끝나길 기다리는 시간
 	FallCheckInterval = 0.25, -- 낙하 탈락 백스톱 폴링 주기
@@ -115,7 +139,14 @@ Config.Round = {
 -- ─────────────────────────────────────────────
 Config.Question = {
 	-- 라운드별 난이도 상한(1~5). 이 값 '이하'의 문제 중에서 뽑으므로 쉬운 문제도 계속 나온다.
-	-- 목록 범위를 넘어가면 마지막 값을 유지한다. (커브 정밀 조정은 Phase 4)
+	-- 목록 범위를 넘어가면 마지막 값을 유지한다.
+	--
+	-- ★ 하한은 두지 않는다 (Phase 4 결정)
+	--   R20 에서도 난이도 1("더 큰 수는?")이 나올 수 있다. 이건 버그가 아니라 커브 형태다 —
+	--   후반의 압박은 문제가 아니라 벽 속도가 담당한다(Round.WallSpeedMax 주석).
+	--   여유시간이 1초 남짓인 라운드에서 난이도 5 만 낸다면 실력이 아니라 운으로 갈린다.
+	--   하한이 필요해지면 여기에 MinDifficultyByRound 를 만들고 QuestionBank.Filter 에
+	--   minDifficulty 를 추가하면 된다. 그때는 풀이 비었을 때 하한을 낮추는 대비가 필수다.
 	DifficultyByRound = { 1, 1, 2, 2, 3, 3, 4, 4, 5 },
 
 	-- 최근 N개 문제는 다시 내지 않는다. 같은 문제가 다시 나오면 앞 라운드의 정답 구역을
@@ -252,6 +283,87 @@ Config.Theme = {
 		ImageGap = 0.03, -- 지시문과 사진 사이 여백(가로 비율)
 	},
 
+	-- 벽 파괴 폭발 (Phase 4 — 클라이언트 WallEffects 가 로컬로 재생한다).
+	--
+	-- ★ 여기 있는 것은 전부 '보이는 것'뿐이다. 폭발이 무언가를 밀어내는 수치는 없고,
+	--   있어서도 안 된다. 정답 구역에 서 있던 사람이 폭발에 밀려 -Z 밖으로 떨어지면
+	--   오답도 아닌데 탈락한다 (src/client/WallEffects.luau 헤더).
+	WallBreak = {
+		-- 벽 앞면을 따라 몇 군데서 터뜨리는가. 벽은 레인 폭(40 studs)만큼 넓어서
+		-- 한 점에서만 터뜨리면 눈앞을 가로막던 물건이 사라지는 느낌이 나지 않는다.
+		BurstPoints = 3,
+		BurstSpread = 0.6, -- 폭발 지점을 벽 폭의 몇 %에 걸쳐 배치할지 (1 = 양 끝까지)
+
+		-- 이펙트 인스턴스가 사라지기까지(초).
+		-- ★ 다음 라운드 WallController.reset() 전에 반드시 끝나야 한다. 파괴는 WallRush
+		--   도중에 일어나므로 남은 돌진 시간 + FallGraceTime + ResultDisplayTime +
+		--   IntermissionTime 이 전부 뒤에 남아 있다 — 2초는 넉넉하다.
+		Lifetime = 2,
+
+		-- 입자 세 겹. 불꽃이 순간을, 연기가 잔상을, 불티가 방향감을 만든다.
+		Fire = {
+			Texture = "rbxasset://textures/particles/fire_main.dds",
+			Count = 55, -- 한 지점당 입자 수
+			SpeedMin = 30,
+			SpeedMax = 70,
+			SizeStart = 6,
+			SizeEnd = 14,
+			LifeMin = 0.25,
+			LifeMax = 0.55,
+			ColorStart = Color3.fromRGB(255, 232, 150),
+			ColorEnd = Color3.fromRGB(255, 88, 30),
+			Spread = 140, -- 거의 구형으로 퍼뜨린다(방향 의존을 없앤다)
+			LightEmission = 0.9,
+		},
+		Smoke = {
+			Texture = "rbxasset://textures/particles/smoke_main.dds",
+			Count = 35,
+			SpeedMin = 10,
+			SpeedMax = 28,
+			SizeStart = 8,
+			SizeEnd = 26,
+			LifeMin = 0.6,
+			LifeMax = 1.2,
+			ColorStart = Color3.fromRGB(96, 96, 102),
+			ColorEnd = Color3.fromRGB(38, 38, 44),
+			Spread = 180,
+			LightEmission = 0,
+		},
+		Spark = {
+			Texture = "rbxasset://textures/particles/sparkles_main.dds",
+			Count = 40,
+			SpeedMin = 45,
+			SpeedMax = 110,
+			SizeStart = 1.6,
+			SizeEnd = 0.2,
+			LifeMin = 0.3,
+			LifeMax = 0.8,
+			ColorStart = Color3.fromRGB(255, 240, 190),
+			ColorEnd = Color3.fromRGB(255, 150, 60),
+			Spread = 180,
+			LightEmission = 1,
+		},
+
+		-- 섬광. 벽이 사라지는 순간을 한 프레임에 알아채게 만드는 장치다.
+		Flash = {
+			Color = Color3.fromRGB(255, 190, 120),
+			Brightness = 6,
+			Range = 70,
+			Time = 0.25,
+		},
+
+		-- 카메라 흔들림. ★ 과하면 그대로 멀미가 된다 ★ 짧고 약하게, 거리로 감쇠시킨다.
+		Shake = {
+			Intensity = 1.6, -- studs
+			Time = 0.35,
+			Falloff = 140, -- 이 거리에서 0. 상공 관전장(높이 80)에서는 약하게 흔들린다.
+		},
+
+		-- 사운드는 Phase 8 담당이다. 여기는 자리만 있고, 비어 있으면 재생하지 않는다.
+		SoundId = "",
+		SoundVolume = 0.6,
+	},
+
 	-- HUD (Phase 3). 화면 중앙은 비운다 — 선택지는 바닥이 보여준다.
 	Hud = {
 		BandHeight = 0.3, -- 화면 상단에서 차지하는 세로 비율
@@ -299,11 +411,17 @@ Config.Debug = {
 -- 파생값 헬퍼
 -- ─────────────────────────────────────────────
 
+--- 라운드별 커브 표 조회. 표 범위를 넘어가면 마지막 값을 유지한다.
+--- ★ 커브 표를 읽는 규칙은 이 함수 하나뿐이어야 한다. 예전에는 getCountdown 이 math.min,
+---   getMaxDifficulty 가 math.clamp 을 써서 함수마다 규칙이 미묘하게 달랐다 — 그런 차이는
+---   표 길이가 달라지는 날 조용히 어긋난다.
+local function curveAt(list: { number }, round: number): number
+	return list[math.clamp(round, 1, #list)]
+end
+
 --- 해당 라운드의 정답 선택 제한시간
 function Config.getCountdown(round: number): number
-	local list = Config.Round.CountdownByRound
-	local value = list[math.min(round, #list)] or Config.Round.MinCountdown
-	return math.max(value, Config.Round.MinCountdown)
+	return math.max(curveAt(Config.Round.CountdownByRound, round), Config.Round.MinCountdown)
 end
 
 --- 해당 라운드의 벽 속도
@@ -314,8 +432,7 @@ end
 
 --- 해당 라운드에 출제 가능한 난이도 상한. QuestionBank 는 이 값 이하의 문제만 후보로 삼는다.
 function Config.getMaxDifficulty(round: number): number
-	local list = Config.Question.DifficultyByRound
-	return list[math.clamp(round, 1, #list)]
+	return curveAt(Config.Question.DifficultyByRound, round)
 end
 
 return Config

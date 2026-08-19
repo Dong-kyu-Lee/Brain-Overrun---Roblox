@@ -204,7 +204,11 @@ local answer: Zone = if rng:NextInteger(0, 1) == 0 then "A" else "B"
 
 `Config.getMaxDifficulty(round)` **이하**의 문제 중에서 뽑는다. 이하이므로 후반에도
 쉬운 문제가 계속 섞여 나온다 — 난이도가 계단처럼 점프하면 하이퍼캐주얼에서는 이탈로 직결된다.
-커브 정밀 조정은 Phase 4 의 몫이다.
+
+Phase 4 에서도 **하한은 두지 않기로 했다.** 후반 라운드는 여유시간이 1초 남짓이라
+난이도 5만 내면 승부가 실력이 아니라 운으로 갈린다 — 그 구간의 압박은 문제가 아니라
+벽 속도가 맡는다. 근거와 하한을 도입할 때의 주의사항은
+[difficulty-curve.md §1](difficulty-curve.md).
 
 ---
 
@@ -494,11 +498,11 @@ Play 후 스폰 지점에서 정면(+Z)을 보면 **두 레인의 선택지가 �
 
 ---
 
-## 11. Phase 4 이후가 건드릴 곳
+## 11. 다음 Phase 가 건드릴 곳
 
-| Phase | 무엇을 |
-|---|---|
-| 4 | `Config.Question.DifficultyByRound` 커브 조정. 벽 파괴 연출은 `WallController.setBroken` |
-| 8 | `ImageAssets` 의 `entries` 채우기 (§8). **코드 변경 없음** |
+| Phase | 무엇을 | 상태 |
+|---|---|---|
+| 4 | 난이도 커브 — `CurveAudit` 이 부팅 때 검산한다([difficulty-curve.md](difficulty-curve.md)). 문제 시스템 쪽 코드 변경 없음 | 완료 |
+| 8 | `ImageAssets` 의 `entries` 채우기 (§8). **코드 변경 없음** | |
 
 `RoundService` 의 라운드 흐름은 더 손댈 필요가 없다.
