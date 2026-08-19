@@ -5,7 +5,7 @@
 	초기화 순서가 중요하다.
 	  1) Remotes  — 클라이언트가 WaitForChild 로 기다리므로 가장 먼저.
 	  2) 맵 검증   — 아래 서비스들이 태그로 맵 오브젝트를 찾는다.
-	  3) 서비스    — SessionService → Arena → QuestionDisplay → RoundService
+	  3) 서비스    — SessionService → Arena → QuestionDisplay → RoundService → AbilityService
 	                (뒤가 앞을 require 한다).
 ]]
 
@@ -15,8 +15,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
+local AbilityService = require(script.Parent.AbilityService)
 local CurveAudit = require(script.Parent.CurveAudit)
 local MapService = require(script.Parent.MapService)
+local MovementAudit = require(script.Parent.MovementAudit)
 local SessionService = require(script.Parent.SessionService)
 local Arena = require(script.Parent.Arena)
 local ImageAssets = require(script.Parent.ImageAssets)
@@ -42,10 +44,16 @@ MapService.ensureReady()
 -- 여기서 경고가 뜨면 게임은 돌아가지만 특정 라운드가 사람이 못 푸는 상태라는 뜻이다.
 CurveAudit.report()
 
+-- 능력 수치 검산(Phase 5). 대시 거리와 밀치기 사거리를 맵 치수와 대조한다.
+-- 경고가 뜨면 게임은 돌아가지만 대시 한 번에 반대 레인에 착지하거나 스폰선에서
+-- 뒤로 대시하면 즉사하는 상태라는 뜻이다.
+MovementAudit.report()
+
 SessionService.start()
 Arena.start() -- KillPlane 태그를 찾으므로 ensureReady() 이후여야 한다
 QuestionDisplay.start() -- BO_AnswerScreen 태그를 찾으므로 ensureReady() 이후여야 한다
 RoundService.start()
+AbilityService.start() -- 대시/밀치기 요청 수신. RoundService 의 상태를 읽으므로 그 뒤다.
 
 print("[BrainOverrun] 서버 부팅 완료")
 

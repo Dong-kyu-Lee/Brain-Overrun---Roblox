@@ -37,7 +37,7 @@ local function newSession(): Session
 		-- 기본값은 "관전 중". 게임에 참가할 때만 RoundService 가 alive 로 바꾼다.
 		alive = false,
 		spectating = true,
-		pushUsesLeft = Config.Push.MaxUsesPerGame, -- Phase 5 에서 실제 소모
+		pushUsesLeft = Config.Push.MaxUsesPerGame, -- AbilityService 가 소모한다 (게임 단위)
 		revivesLeft = 0, -- Phase 7 에서 구매분 반영
 		lastDashAt = 0,
 		lastPushAt = 0,
@@ -82,6 +82,39 @@ function SessionService.setAlive(player: Player, alive: boolean)
 	session.alive = alive
 	session.spectating = not alive
 	SessionService.sync(player)
+end
+
+
+-- ─────────────────────────────────────────────
+-- 능력 사용 기록 (Phase 5)
+--
+-- ★ 시각은 반드시 Workspace:GetServerTimeNow() 다 ★
+--   이 값은 SessionStateChanged 로 클라이언트에 그대로 나가고, 클라이언트는 자기
+--   GetServerTimeNow() 와 빼서 남은 쿨타임을 그린다(HUD 타이머가 deadline 을 쓰는 방식과 같다).
+--   os.clock() 이나 tick() 을 넣으면 서버·클라이언트 기준이 달라 게이지가 엉뚱하게 찬다.
+--
+-- ★ 판정은 여기서 하지 않는다 ★ 쿨타임이 남았는지·횟수가 있는지 '묻는' 쪽은
+--   AbilityService 다. 이 파일은 상태를 바꾸고 알릴 뿐이다.
+-- ─────────────────────────────────────────────
+
+--- 대시 사용 시각을 찍고 클라이언트에 알린다.
+function SessionService.markDash(player: Player, at: number)
+	SessionService.get(player).lastDashAt = at
+	SessionService.sync(player)
+end
+
+--- 밀치기 1회 소모. 남은 횟수가 없으면 아무것도 바꾸지 않고 false.
+--- 횟수는 '게임' 단위다 — 라운드마다 채우면 기획서의 "1게임 당 최대 3회"가 무너진다.
+--- 채워지는 곳은 SessionService.reset() 하나뿐이고, 그건 게임 시작 시 buildRoster() 가 부른다.
+function SessionService.consumePush(player: Player, at: number): boolean
+	local session = SessionService.get(player)
+	if session.pushUsesLeft <= 0 then
+		return false
+	end
+	session.pushUsesLeft -= 1
+	session.lastPushAt = at
+	SessionService.sync(player)
+	return true
 end
 
 function SessionService.addRoundSurvived(player: Player)

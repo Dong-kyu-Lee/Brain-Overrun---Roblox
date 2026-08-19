@@ -276,6 +276,23 @@ Phase 5(대시)가 들어와도 **`CurveAudit` 의 횡단 시간은 걷는 속�
 
 ---
 
+
+---
+
+## 7-2. Phase 5 연동 현황 (완료)
+
+라운드 흐름은 여기서도 바뀌지 않았다. `RoundService` 는 능력의 존재를 모르고,
+`AbilityService` 가 `RoundService.getState()` 를 한 방향으로 읽을 뿐이다.
+
+- [x] **능력이 도는 시간대는 `Countdown` / `WallRush` 뿐** — `Judge` 이후에 움직여 봐야
+      판정이 끝났고, 무엇보다 관전자가 대시로 상공 유리 바닥을 벗어나면 안 된다.
+- [x] **대시는 벽 판정을 건드리지 않는다** — 수평 구속뿐이라 벽 충돌과 `shoveTrapped`(§5)가
+      그대로 이긴다. 벽을 통과해 살아남는 경로는 생기지 않는다.
+- [x] **밀치기 횟수는 게임 단위** — 채워지는 곳은 `SessionService.reset()` 하나이고,
+      그건 게임 시작의 `buildRoster()` 가 부른다(§6).
+
+자세한 내용은 [abilities.md](abilities.md).
+
 ## 8. 검증 방법
 
 ### 부팅 로그

@@ -59,11 +59,17 @@ src/
 │   ├── QuestionService.luau   문제 추첨 · 정답 구역 배정 · 페이로드 생성
 │   ├── QuestionDisplay.luau   바닥 SurfaceGui · 공중 보드
 │   ├── RoundService.luau      라운드 상태머신
-│   └── CurveAudit.luau        난이도 커브 부팅 검산 ★ 수치는 없다. Config 를 읽을 뿐 ★
+│   ├── AbilityService.luau    대시·밀치기 판정과 물리 ★ 요청만 받고 전부 다시 판정한다 ★
+│   ├── CurveAudit.luau        난이도 커브 부팅 검산 ★ 수치는 없다. Config 를 읽을 뿐 ★
+│   └── MovementAudit.luau     능력 수치 × 맵 기하 부팅 검산 (CurveAudit 의 형제)
 └── client/     → StarterPlayer.StarterPlayerScripts.Client
     ├── Bootstrap.client.luau  클라이언트 진입점
     ├── Hud.luau               상태·문제 지시문·타이머·알림 (상단 밴드)
     ├── WallEffects.luau       벽 파괴 폭발 ★ 로컬 전용. 아무것도 밀지 않는다 ★
+    ├── AbilityState.luau      서버 세션의 읽기 전용 사본 ★ 아래 셋의 단일 소스 ★
+    ├── DashInput.luau         대시 입력 → 방향 계산 → 요청
+    ├── PushInput.luau         밀치기 입력 → 요청(인자 없음)
+    ├── AbilityHud.luau        쿨타임·잔여 횟수 배지 (우측 상단)
     └── ImagePreload.luau      문제 이미지 미리 내려받기
 ```
 
@@ -77,6 +83,7 @@ src/
 | [docs/round-loop.md](docs/round-loop.md) | 라운드 루프 (Phase 2) — 상태머신, 생존 판정, 벽 이동 함정 |
 | [docs/question-system.md](docs/question-system.md) | 문제 시스템 (Phase 3) — 정답 보안 경계, 문제 추가법, **바닥 스크린 캔버스 규약** |
 | [docs/difficulty-curve.md](docs/difficulty-curve.md) | 난이도 커브 (Phase 4) — 세 축, **여유시간**, CurveAudit 읽는 법, 수치를 바꿀 때의 경계 |
+| [docs/abilities.md](docs/abilities.md) | 능력 시스템 (Phase 5) — 대시·밀치기, 게이트 네 겹, **네트워크 소유권**, MovementAudit |
 
 ## 맵 좌표계
 
@@ -159,6 +166,24 @@ R8~R9에서 바닥(2초 / 난이도 5)에 닿으므로 **후반을 만드는 축
 * ⚠ **파괴 예고(직전 깜빡임)를 넣지 마라.** 파괴는 `WallRush` 도중에 일어나고 그때도
   다이브가 가능하므로, 예고는 곧 '마지막 기회'를 통째로 앞당겨 주는 것이다.
 
+## 대시 · 밀치기
+
+대시는 전원이 쓰는 이동 기술, 밀치기는 게임당 3회로 제한된 전술 아이템이다.
+자세한 내용은 [docs/abilities.md](docs/abilities.md) 참고. 요약하면:
+
+* **클라이언트는 요청만 보낸다.** 쿨타임·남은 횟수·사거리·각도·라운드 상태는 전부 서버가
+  다시 판정한다. 방향 벡터조차 평탄화·정규화해서 쓴다.
+* **능력은 `Countdown`/`WallRush` 에서만 돈다.** 관전자에게 열어 주면 대시로 유리 바닥을 벗어난다.
+* **키는 `Config.Input` 한 곳에** 있고 배지 안내문도 거기서 파생된다 — 서버는 키를 모른다.
+* ⚠ **대시는 수평 전용이다.** Y 성분을 남기면 비행이 되고, 비행이면 벽 위이자 맵 밖이다.
+  `LinearVelocity` 를 Plane 모드로 걸어 중력과 점프를 살려 둔다.
+* ⚠ **넉백은 피해자의 네트워크 소유권을 잠깐 서버로 가져와야 한다.** 안 그러면 임펄스가
+  피해자 클라이언트의 복제 상태에 덮여 조용히 사라진다. 대시는 반대로 소유권을 건드리지 않는다.
+* ⚠ **대시 이동거리(기본 17.1 studs)에는 두 개의 경계가 있다** — 레인 폭(40)을 넘으면
+  문제를 안 읽어도 이기고, 스폰선 뒤 여유(24)를 넘으면 뒤로 대시하는 순간 즉사한다.
+  `MovementAudit` 이 부팅 때 검산한다.
+* ⚠ **`CurveAudit` 에 대시를 들여놓지 마라.** 여유시간은 걷는 속도만 가정한다.
+
 ## 코딩 규약
 
 1. **모든 밸런싱 수치는 `Config.luau`에만 존재한다.** 다른 파일에 하드코딩된 상수가 보이면 버그다.
@@ -178,7 +203,7 @@ R8~R9에서 바닥(2초 / 난이도 5)에 닿으므로 **후반을 만드는 축
 | 2 | 라운드 상태머신 · 생존 판정 · 관전 전환 | ✅ |
 | 3 | 문제 시스템 · 바닥 SurfaceGui · HUD | ✅ |
 | 4 | 난이도 커브 · 벽 파괴 연출 | ✅ |
-| 5 | 대시 · 밀치기 | ⬜ |
+| 5 | 대시 · 밀치기 · 능력 검산 | ✅ |
 | 6 | DataStore · 코인 경제 · 상점 | ⬜ |
 | 7 | 부활권 (MarketplaceService) | ⬜ |
 | 8 | 이미지형 문제 · 사운드 · QA | ⬜ |

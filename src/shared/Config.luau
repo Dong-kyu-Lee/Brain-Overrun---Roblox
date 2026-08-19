@@ -170,9 +170,26 @@ Config.Movement = {
 	WalkSpeed = 22,
 	JumpPower = 50,
 
+	-- 대시 (Phase 5). 기획서 4장: "방향키 + Shift(또는 Q), 2초 쿨타임".
+	--
+	-- ★ 세 값은 따로 보면 의미가 없다 — 곱해서 '이동거리'로 봐야 한다
+	--   대시 이동거리 = DashSpeed × DashDuration = 17.1 studs (기본값).
+	--   레인 폭 40 studs 횡단이 걷기 1.82s → 대시 1회를 섞으면 약 1.22s 로 줄어든다.
+	--   ★ 이동거리가 레인 폭(MapLayout.LaneCrossDistance)에 근접하면 대시 한 번에 반대
+	--     레인 착지가 된다. 문제를 안 읽고 벽이 부서지는 쪽을 보고 달려도 이기게 된다.
+	--   ★ 이동거리가 스폰밴드 인셋(Map.SpawnBandInset)을 넘으면 스폰선에서 뒤(-Z)로 한 번
+	--     대시하는 것만으로 열린 끝단 밖으로 나가 즉사한다.
+	--   두 경계 모두 MovementAudit 이 부팅 때 검산한다. 기본값은 앞의 경계까지 2.9 studs
+	--   밖에 안 남은 아슬아슬한 균형이므로, 속도나 지속시간을 올릴 때는 로그를 볼 것.
 	DashCooldown = 2, -- 기획서 명시
 	DashSpeed = 95,
 	DashDuration = 0.18,
+
+	-- 대시 구동력 상한 (LinearVelocity.MaxForce, ForceLimitMode = Magnitude).
+	-- 캐릭터 질량(≈15)을 몇 프레임 안에 DashSpeed 까지 올리려면 F = m·a 로 수만 단위가
+	-- 필요하다. LinearVelocity 의 기본값 1000 을 그대로 두면 대시가 '조금 빨리 걷기'가 된다.
+	-- ★ 무한대로 두지 말 것 — 벽에 낀 채로 계속 밀어붙여 캐릭터가 떨린다.
+	DashMaxForce = 30000,
 }
 
 -- ─────────────────────────────────────────────
@@ -181,10 +198,54 @@ Config.Movement = {
 Config.Push = {
 	MaxUsesPerGame = 3, -- 기획서 명시: 트롤링 과열 방지
 	Cooldown = 1.5,
+
+	-- 수평 거리(studs). ★ 레인 폭보다 충분히 작아야 한다 ★ 옆 레인 사람까지 밀 수 있으면
+	-- "정답 구역에 서 있으면 안전하다"는 이 게임의 유일한 약속이 깨진다. MovementAudit 검산 대상.
 	Range = 12,
-	ConeAngle = 60, -- 전방 판정 각도(도)
+	-- 전방 판정 원뿔의 '전체' 각도(도). 반각(30°) 안에 들어온 대상만 맞는다.
+	ConeAngle = 60,
+
+	-- ★ 힘이 아니라 '속도 증분(studs/s)' 이다 ★
+	--   AbilityService 가 대상의 질량을 곱해 ApplyImpulse 로 넣는다 (Δv = Force).
+	--   여기서 질량을 또 고려하면 두 번 곱하는 셈이 된다.
 	Force = 75,
 	UpwardForce = 15,
+
+	-- 넉백 직후 서버가 피해자의 네트워크 소유권을 쥐고 있는 시간(초).
+	-- ★ 이게 없으면 임펄스가 조용히 사라진다 ★ 캐릭터는 평소 그 플레이어의 클라이언트가
+	--   시뮬레이션하므로, 서버가 준 속도는 다음 복제 프레임에 덮여 없어진다. 결과는
+	--   "미는 사람 화면에서만 밀리는" 서버·클라이언트 불일치다.
+	OwnershipHoldTime = 0.4,
+}
+
+-- ─────────────────────────────────────────────
+-- 입력 (Phase 5)
+--
+-- 키는 밸런싱 수치가 아니지만 클라이언트 모듈 셋이 나눠 쓰므로 여기 모은다.
+-- ★ 서버는 키를 모른다 ★ 서버가 받는 것은 "대시 요청"과 "밀치기 요청"뿐이고,
+--   무슨 키를 눌렀는지는 판정에 아무 영향이 없다 (README 규약 2).
+-- ─────────────────────────────────────────────
+Config.Input = {
+	-- 대시. 기획서 4장이 Shift 와 Q 를 함께 적어 두 키를 모두 받는다.
+	-- ★ Shift 는 로블록스 기본 시프트락(게임 설정에서 켠 경우)과 겹친다. 충돌이 거슬리면
+	--   Q 만 남길 것 — 서버는 어느 키였는지 모르므로 여기만 고치면 된다.
+	DashKeys = { Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.Q },
+	DashGamepadKeys = { Enum.KeyCode.ButtonL2 },
+
+	-- 밀치기. E 는 로블록스 상호작용(ProximityPrompt) 관례라 피했고, 마우스 우클릭은
+	-- 카메라 조작과 겹친다.
+	PushKeys = { Enum.KeyCode.F },
+	PushGamepadKeys = { Enum.KeyCode.ButtonR2 },
+
+	-- 모바일 터치 버튼을 ContextActionService 가 만들게 할지.
+	TouchButtons = true,
+
+	-- 같은 플레이어의 능력 '요청'을 받아주는 최소 간격(초).
+	-- ★ 쿨타임과 다른 물건이다 ★ 쿨타임은 성공한 사용 사이의 간격이고, 이건 실패하는
+	--   요청까지 포함한 통신 자체의 상한이다. 없으면 조건이 안 맞는 요청(횟수 0 등)을
+	--   초당 수백 번 보내 서버 판정과 알림을 스팸할 수 있다. 클라이언트도 같은 값으로
+	--   스스로를 제한하지만, 믿는 쪽은 언제나 서버다.
+	MinRequestInterval = 0.1,
 }
 
 -- ─────────────────────────────────────────────
@@ -378,6 +439,33 @@ Config.Theme = {
 		TimerWarnColor = Color3.fromRGB(255, 110, 90),
 		TimerWarnAt = 1.5, -- 남은 시간이 이 값 이하로 떨어지면 경고색
 
+		-- 능력 배지 (Phase 5 — AbilityHud). 우측 상단 구석에 대시 쿨타임과 밀치기 잔여 횟수.
+		--
+		-- ★ 상단 밴드 안에 넣지도, 화면 아래로 내리지도 않는다 ★
+		--   밴드는 문제 본문·타이머의 자리라 배지가 들어가면 글자가 밀린다. 화면 아래쪽은
+		--   바닥 선택지를 보는 영역이라 더더욱 안 된다. 그래서 배지만 별도 ScreenGui 로
+		--   구석에 띄운다 (모바일 터치 버튼은 ContextActionService 가 반대편 구석에 만든다).
+		Ability = {
+			Size = 0.075, -- 화면 '높이' 대비 배지 한 변
+			Gap = 0.012,
+			Margin = 0.02,
+			CornerRadius = 0.16, -- 배지 한 변 대비
+
+			BackgroundColor = Color3.fromRGB(18, 20, 28),
+			BackgroundTransparency = 0.3,
+
+			ReadyColor = Color3.fromRGB(255, 255, 255),
+			CooldownColor = Color3.fromRGB(150, 155, 170), -- 쿨타임이 도는 동안
+			EmptyColor = Color3.fromRGB(190, 110, 100), -- 남은 횟수 0 또는 미보유
+
+			-- 쿨타임 게이지. 아래에서 위로 차오른다.
+			FillColor = Color3.fromRGB(70, 130, 220),
+			FillTransparency = 0.45,
+
+			LabelSize = 14,
+			ValueSize = 24,
+		},
+
 		NotifyColor = {
 			info = Color3.fromRGB(230, 230, 230),
 			warn = Color3.fromRGB(255, 130, 110),
@@ -405,6 +493,12 @@ Config.Debug = {
 	-- 켜 둔 채 테스트해도 정답이 새지 않는다. (Phase 2 의 RevealAnswer 는 전 클라이언트에
 	-- 뿌리는 물건이었고, 진짜 문제가 생긴 지금 존재 이유가 없어져 제거했다.)
 	LogQuestions = true,
+
+	-- 밀치기 스킬을 전원에게 지급한다 (Phase 5 개발용).
+	-- ★ Phase 6 이 DataStore 를 붙이면 AbilityService.ownsPushSkill 이 실제 보유 여부를
+	--   읽게 되고 이 플래그는 사라진다. 그 전까지는 밀치기를 테스트할 유일한 방법이다.
+	--   ★ 출시 전 반드시 false — 아니면 500코인 상품이 공짜다.
+	GrantPushSkill = true,
 }
 
 -- ─────────────────────────────────────────────
